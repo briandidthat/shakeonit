@@ -1,22 +1,23 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
-pragma solidity 0.8.0;
+pragma solidity ^0.8.0;
 
-import "./interfaces/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
-contract Bet {
-    enum Status { PENDING, FUNDED, SETTLED }
+contract Bet is Initializable {
+    enum Status {
+        INITIATED,
+        FUNDED,
+        SETTLED
+    }
 
-    address public partyA;
-    address public partyB;
+    address public initiator;
+    address public acceptor;
     address public arbiter;
-    IERC20 public fundToken;
     uint256 public amount;
     uint256 public deadline;
-    bool public partyAPaid;
-    bool public partyBPaid;
-    bool public active;
-    bool public payoutComplete;
-    bool public canPayBeforeDeadline;
+    string public condition;
+    IERC20 public fundToken;
     Status public status;
     mapping(address => uint256) public balances;
 
@@ -27,81 +28,61 @@ contract Bet {
 
     modifier onlyParties() {
         require(
-            msg.sender == partyA || msg.sender == partyB,
-            "Restricted to escrow participants"
+            msg.sender == initiator || msg.sender == acceptor,
+            "Restricted to bet participants"
         );
         _;
     }
 
-    constructor(
-        address _partyA,
-        address _partyB,
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(
+        address _initiator,
         address _arbiter,
         address _fundToken,
-        uint _amount
-    ) {
-        partyA = _partyA;
-        partyB = _partyB;
+        uint256 _amount,
+        uint256 _deadline,
+        string memory _condition
+    ) external initializer {
+        require(
+            fundToken.transferFrom(_initiator, address(this), _amount),
+            "Token transfer failed"
+        );
+        // update the balance of the initiator upon successful transfer
+        balances[_initiator] = _amount;
+
+        initiator = _initiator;
         arbiter = _arbiter;
         fundToken = IERC20(_fundToken);
         amount = _amount;
+        deadline = _deadline;
+        condition = _condition;
+        status = Status.INITIATED;
     }
 
-    function fund() external payable onlyParties {
-        require(
-            msg.value == amount,
-            "Amount sent must be equal to escrow amount"
-        );
-        if (msg.sender == partyA) {
-            partyAPaid = true;
-        } else {
-            partyBPaid = true;
-        }
-
-        if (partyAPaid && partyBPaid) {
-            active = true;
-        }
-    }
-
-    /**
-     * @dev Fund the escrow with ERC20 tokens
-     * @param _amount The amount of tokens to fund the escrow
-     * @param _token The address of the token to fund the escrow
-     * @param party The address of the party funding the escrow
-     */
-    function fund(uint256 _amount, address _token, address party) external onlyParties {
+    function acceptBet(uint256 _amount, address _token) external {
         require(
             _token == address(fundToken),
             "Token sent must be the same as the escrow token"
-        )
-        require(
-            msg.value == _amount,
-            "Amount sent must be equal to escrow amount"
         );
         require(
-            IERC20(_token).allowance(msg.sender, address(this)) >= _amount,
-            "Token allowance is insufficient"
-        )
+            balances[msg.sender] == 0,
+            "Participant has already funded the escrow"
+        );
+        require(status != Status.FUNDED, "Bet is already funded");
 
+        IERC20 token = IERC20(_token);
 
-        IERC20 token = IERC20(token);
-        token.transferFrom(msg.sender, address(this), _amount);
+        require(
+            token.transferFrom(msg.sender, address(this), _amount),
+            "Token transfer failed"
+        );
 
-        if (msg.sender == partyA) {
-            partyAPaid = true;
-        } else {
-            partyBPaid = true;
-        }
-
-        if (partyAPaid && partyBPaid) {
-            deadline = block.timestamp + 1 days;
-            active = true;
-        }
+        // update the balance of the acceptor
+        acceptor = msg.sender;
+        balances[msg.sender] = _amount;
+        status = Status.FUNDED;
     }
-
-    function declareWinner(address _winner) external onlyArbiter {
-        require(active, "Escrow is not active");
-        require()
-    }
-
 }
