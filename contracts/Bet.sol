@@ -13,11 +13,9 @@ contract Bet is IShakeOnIt, Initializable {
     address public winner;
     uint256 public amount;
     uint256 public payout;
-    uint256 public deadline;
-    uint256 public arbiterPercentage;
     uint256 public arbiterFee;
     uint256 public platformFee;
-    uint256 public platformPercentage;
+    uint256 public deadline;
     string public condition;
     IERC20 public fundToken;
     BetStatus public status;
@@ -46,9 +44,9 @@ contract Bet is IShakeOnIt, Initializable {
         address _arbiter,
         address _fundToken,
         uint256 _amount,
+        uint256 _arbiterFee,
+        uint256 _platformFee,
         uint256 _deadline,
-        uint256 _arbiterPercentage,
-        uint256 _platformPercentage,
         string memory _condition
     ) external initializer {
         require(
@@ -58,38 +56,33 @@ contract Bet is IShakeOnIt, Initializable {
         // update the balance of the initiator upon successful transfer
         balances[_initiator] = _amount;
 
+        dataCenter = _dataCenter;
         initiator = _initiator;
         arbiter = _arbiter;
         fundToken = IERC20(_fundToken);
         amount = _amount;
+        arbiterFee = _arbiterFee;
+        platformFee = _platformFee;
+        payout = amount - (arbiterFee + platformFee);
         deadline = _deadline;
-        arbiterPercentage = _arbiterPercentage;
-        platformPercentage = _platformPercentage;
         condition = _condition;
         status = BetStatus.INITIATED;
     }
 
-    function acceptBet(uint256 _amount, address _token) external {
-        require(
-            _token == address(fundToken),
-            "Token sent must be the same as the escrow token"
-        );
+    function acceptBet() external {
+        require(status == BetStatus.INITIATED, "Bet must be in initiated status");
         require(
             balances[msg.sender] == 0,
             "Participant has already funded the escrow"
         );
-        require(status != BetStatus.FUNDED, "Bet is already funded");
-
-        IERC20 token = IERC20(_token);
-
         require(
-            token.transferFrom(msg.sender, address(this), _amount),
+            fundToken.transferFrom(msg.sender, address(this), amount),
             "Token transfer failed"
         );
 
         // update the balance of the acceptor
         acceptor = msg.sender;
-        balances[msg.sender] = _amount;
+        balances[msg.sender] = amount;
         status = BetStatus.FUNDED;
     }
 
@@ -99,21 +92,14 @@ contract Bet is IShakeOnIt, Initializable {
      * @param _winner The address of the participant who is declared the winner.
      */
     function declareWinner(address _winner) external onlyArbiter {
-        require(status == BetStatus.FUNDED, "Bet not funded yet"); // ensure the bet is funded
         require(_winner == initiator || _winner == acceptor, "Invalid winner"); // ensure the winner is a participant
-        require(block.timestamp >= deadline, "Bet has expired"); // ensure the deadline has passed
-        // update the status of the bet
-        status = BetStatus.WON;
-
+        require(status == BetStatus.FUNDED, "Bet has not been funded yet"); // ensure the bet is funded
+        require(block.timestamp >= deadline, "Deadline has not passed yet"); // ensure the deadline has passed
+        
         // update the winner
         winner = _winner;
-
-        // calculate the arbiter and platform fees
-        arbiterFee = (amount * arbiterPercentage) / 100;
-        platformFee = (amount * platformPercentage) / 100;
-
-        // calculate the final payout for the winner
-        payout = amount - (arbiterFee + platformFee);
+        // update the status of the bet
+        status = BetStatus.WON;
 
         // transfer the funds to the arbiter
         IERC20 token = IERC20(address(fundToken));
@@ -121,11 +107,13 @@ contract Bet is IShakeOnIt, Initializable {
             token.transfer(arbiter, arbiterFee),
             "Token transfer to arbiter failed"
         );
+
+        emit BetWon(address(this), winner, arbiter, address(fundToken), amount);
     }
 
     function withdrawEarnings() external onlyParties {
         require(msg.sender == winner, "Restricted to winner");
-        require(status == BetStatus.WON, "Bet not won yet");
+        require(status == BetStatus.WON, "Bet has not been declared won yet");
         require(balances[msg.sender] > 0, "No funds to withdraw");
 
         // transfer the platform fee to the factory
