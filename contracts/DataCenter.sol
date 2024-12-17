@@ -3,33 +3,48 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./UserStorage.sol";
+import "./interfaces/IShakeOnIt.sol";
 
-contract DataCenter is Ownable {
-    address public factory;
-    address[] public deployedBets;
-    address[] public deployers;
-    address[] public arbiters;
-    address[] public blockedArbiters;
-    mapping(address => bool) public isArbiter;
-    mapping(address => bool) public isArbiterBlocked;
-    mapping(address => address) public userStorageRegistry;
+contract DataCenter is IShakeOnIt, Ownable {
+    address[] private deployedBets;
+    address[] private users;
+    address[] private arbiters;
+    address[] private blockedArbiters;
+    mapping(address => bool) private isUser;
+    mapping(address => bool) private isArbiter;
+    mapping(address => bool) private isArbiterBlocked;
+    mapping(address => address) private userStorageRegistry;
 
-    function createBet(
+    constructor(address _factory) Ownable(_factory) {}
+
+    /**
+     * @notice Saves a new bet to the user's storage contract
+     * @dev Creates a new UserStorage contract if user doesn't have one yet
+     * @param _betContract Address of the bet contract
+     * @param _initiator Address of the user initiating the bet
+     * @param _arbiter Address of the arbiter for this bet
+     * @param _fundToken Address of the token used for betting
+     * @param _amount Amount of tokens to be bet
+     * @param _deadline Timestamp when the bet expires
+     * @param _message Description or terms of the bet
+     * @custom:access Only owner
+     */
+    function saveBet(
         address _betContract,
-        address _proposer,
+        address _initiator,
         address _arbiter,
         address _fundToken,
         uint256 _amount,
         uint256 _deadline,
         string memory _message
-    ) external {
-        address userStorageAddress = userStorageRegistry[_proposer];
+    ) external onlyOwner {
+        address userStorageAddress = userStorageRegistry[_initiator];
         UserStorage storageContract;
 
         if (userStorageAddress == address(0)) {
-            storageContract = new UserStorage(_proposer);
+            storageContract = new UserStorage(_initiator, address(this));
             userStorageAddress = address(storageContract);
-            userStorageRegistry[_proposer] = userStorageAddress;
+            userStorageRegistry[_initiator] = userStorageAddress;
         } else {
             storageContract = UserStorage(userStorageAddress);
         }
@@ -41,6 +56,39 @@ contract DataCenter is Ownable {
             _amount,
             _deadline,
             _message
+        );
+        // if the initiator is a new user, add them to the user list
+        if (!isUser[_initiator]) {
+            users.push(_initiator);
+            isUser[_initiator] = true;
+        }
+        // add the bet to the list of deployed bets
+        deployedBets.push(_betContract);
+    }
+
+    /**
+     * @notice This function is called when a bet is accepted.
+     * @param _wager The wager details including proposer and acceptor addresses.
+     * @dev Updates the bet status in the user storage contract and registers the acceptor if they are a new user.
+     */
+    function betAccepted(Wager memory _wager) external {
+        address userStorageAddress = userStorageRegistry[_wager.proposer];
+        UserStorage storageContract = UserStorage(userStorageAddress);
+        // update the bet status in the user storage
+        storageContract.acceptBet(_wager);
+        // if the acceptor is a new user, add them to the user list and marks them as a user.
+        if (!isUser[_wager.acceptor]) {
+            users.push(_wager.acceptor);
+            isUser[_wager.acceptor] = true;
+        }
+
+        // emit BetAccepted event
+        emit BetAccepted(
+            _wager.betContract,
+            _wager.acceptor,
+            _wager.fundToken,
+            _wager.amount,
+            _wager.deadline
         );
     }
 
@@ -64,5 +112,51 @@ contract DataCenter is Ownable {
         require(!isArbiter[_arbiter], "Arbiter already added");
         // add the specified arbiter
         arbiters.push(_arbiter);
+    }
+
+    /**
+     * @dev Get user storage address
+     * @param _user The address of the user
+     */
+    function getUserStorage(address _user) external view returns (address) {
+        require(isUser[msg.sender], "User has not created any bet");
+        return userStorageRegistry[_user];
+    }
+
+    /**
+     * @dev Get the list of all users
+     */
+    function getUsers() external view returns (address[] memory) {
+        return users;
+    }
+
+    /**
+     * @dev Get the list of all arbiters
+     */
+    function getArbiters() external view returns (address[] memory) {
+        return arbiters;
+    }
+
+    /**
+     * @dev Get the list of all blocked arbiters
+     */
+    function getBlockedArbiters() external view returns (address[] memory) {
+        return blockedArbiters;
+    }
+
+    /**
+     * @dev Get the list of all bets
+     */
+    function getBets() external view returns (address[] memory) {
+        return deployedBets;
+    }
+
+    /**
+     * @notice Sets a new factory address and transfers ownership to the new factory.
+     * @dev This function can only be called by the current owner.
+     * @param _factory The address of the new factory to be set.
+     */
+    function setNewFactory(address _factory) external onlyOwner {
+        _transferOwnership(_factory);
     }
 }
