@@ -33,6 +33,8 @@ contract BetFactory is Ownable, IShakeOnIt {
         address _fundToken,
         uint256 _amount,
         uint256 _deadline,
+        uint256 _arbiterPercentage,
+        uint256 _platformPercentage,
         string memory _condition
     ) external returns (address) {
         require(_amount > 0, "Amount should be greater than 0");
@@ -47,14 +49,21 @@ contract BetFactory is Ownable, IShakeOnIt {
 
         // Create a new bet clone
         address bet = Clones.clone(implementation);
+
+        // get the current platform percentage
+        uint256 platformPercentage = dataCenter.getPlatformPercentage();
+
         // Initialize the bet clone
         Bet(bet).initialize(
+            address(dataCenter),
             msg.sender,
             _arbiter,
             _fundToken,
             _amount,
             _deadline,
-            _condition
+            _condition,
+            _arbiterPercentage,
+            platformPercentage
         );
 
         // increment the number of instances

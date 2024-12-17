@@ -6,6 +6,7 @@ import "./UserStorage.sol";
 import "./interfaces/IShakeOnIt.sol";
 
 contract DataCenter is IShakeOnIt, Ownable {
+    uint256 private platformPercentage;
     address[] private deployedBets;
     address[] private users;
     address[] private arbiters;
@@ -158,5 +159,23 @@ contract DataCenter is IShakeOnIt, Ownable {
      */
     function setNewFactory(address _factory) external onlyOwner {
         _transferOwnership(_factory);
+    }
+
+    /**
+     * @notice Sets the platform percentage
+     * @dev This function can only be called by the current owner.
+     * @param _platformPercentage The new platform percentage to be set.
+     */
+    function setPlatformPercentage(
+        uint256 _platformPercentage
+    ) external onlyOwner {
+        platformPercentage = _platformPercentage;
+    }
+
+    /**
+     * @notice Gets the platform percentage
+     */
+    function getPlatformPercentage() external view returns (uint256) {
+        return platformPercentage;
     }
 }
