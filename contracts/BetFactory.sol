@@ -34,7 +34,6 @@ contract BetFactory is Ownable, IShakeOnIt {
         uint256 _amount,
         uint256 _deadline,
         uint256 _arbiterPercentage,
-        uint256 _platformPercentage,
         string memory _condition
     ) external returns (address) {
         require(_amount > 0, "Amount should be greater than 0");
@@ -61,9 +60,9 @@ contract BetFactory is Ownable, IShakeOnIt {
             _fundToken,
             _amount,
             _deadline,
-            _condition,
             _arbiterPercentage,
-            platformPercentage
+            platformPercentage,
+            _condition
         );
 
         // increment the number of instances
