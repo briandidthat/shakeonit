@@ -2,36 +2,20 @@
 pragma solidity ^0.8.0;
 
 import "./Bet.sol";
+import "./interfaces/IShakeOnIt.sol";
 import "./DataCenter.sol";
 import "@openzeppelin/contracts/proxy/Clones.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract BetFactory is Ownable {
+contract BetFactory is Ownable, IShakeOnIt {
     address public implementation;
     uint256 public instances;
     DataCenter private dataCenter;
 
-    event BetCreated(
-        address indexed betAddress,
-        address indexed initiator,
-        address indexed arbiter,
-        address fundToken,
-        uint256 amount,
-        uint256 deadline
-    );
-
-    event BetAccepted(
-        address indexed betAddress,
-        address indexed acceptor,
-        address indexed fundToken,
-        uint256 amount,
-        uint256 deadline
-    );
-
-    constructor(address _dataCenter) {
+    constructor() Ownable(msg.sender) {
         implementation = address(new Bet());
-        dataCenter = DataCenter(_dataCenter);
+        dataCenter = new DataCenter(address(this));
     }
 
     /**
@@ -50,14 +34,14 @@ contract BetFactory is Ownable {
         uint256 _amount,
         uint256 _deadline,
         string memory _condition
-    ) external {
+    ) external returns (address) {
         require(_amount > 0, "Amount should be greater than 0");
         require(
             _initiator != address(0) && _arbiter != address(0),
             "Zero address not allowed"
         );
         require(
-            IERC20(_fundToken).balanceOf(_proposer) >= _amount,
+            IERC20(_fundToken).balanceOf(_initiator) >= _amount,
             "Insufficient balance"
         );
 
@@ -76,7 +60,7 @@ contract BetFactory is Ownable {
         // increment the number of instances
         instances++;
         // store the proposal in the data center
-        dataCenter.createBet(
+        dataCenter.saveBet(
             bet,
             msg.sender,
             _arbiter,

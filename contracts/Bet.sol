@@ -1,16 +1,11 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity ^0.8.0;
 
+import "./interfaces/IShakeOnIt.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
-contract Bet is Initializable {
-    enum Status {
-        INITIATED,
-        FUNDED,
-        SETTLED
-    }
-
+contract Bet is IShakeOnIt, Initializable {
     address public initiator;
     address public acceptor;
     address public arbiter;
@@ -18,7 +13,7 @@ contract Bet is Initializable {
     uint256 public deadline;
     string public condition;
     IERC20 public fundToken;
-    Status public status;
+    BetStatus public status;
     mapping(address => uint256) public balances;
 
     modifier onlyArbiter() {
@@ -59,7 +54,7 @@ contract Bet is Initializable {
         amount = _amount;
         deadline = _deadline;
         condition = _condition;
-        status = Status.INITIATED;
+        status = BetStatus.INITIATED;
     }
 
     function acceptBet(uint256 _amount, address _token) external {
@@ -71,7 +66,7 @@ contract Bet is Initializable {
             balances[msg.sender] == 0,
             "Participant has already funded the escrow"
         );
-        require(status != Status.FUNDED, "Bet is already funded");
+        require(status != BetStatus.FUNDED, "Bet is already funded");
 
         IERC20 token = IERC20(_token);
 
@@ -83,6 +78,14 @@ contract Bet is Initializable {
         // update the balance of the acceptor
         acceptor = msg.sender;
         balances[msg.sender] = _amount;
-        status = Status.FUNDED;
+        status = BetStatus.FUNDED;
+    }
+
+    function declareWinner(address winner) external onlyArbiter {
+        require(status == BetStatus.FUNDED, "Bet not funded yet"); // ensure the bet is funded
+        require(winner == initiator || winner == acceptor, "Invalid winner"); // ensure the winner is a participant
+        require(block.timestamp >= deadline, "Bet has expired"); // ensure the deadline has passed
+
+        status = BetStatus.WON;
     }
 }

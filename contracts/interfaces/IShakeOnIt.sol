@@ -1,0 +1,56 @@
+// SPDX-License-Identifier: SEE LICENSE IN LICENSE
+pragma solidity ^0.8.0;
+
+interface IShakeOnIt {
+    enum BetStatus {
+        INITIATED,
+        FUNDED,
+        WON,
+        SETTLED
+    }
+
+    struct Wager {
+        address betContract;
+        address proposer;
+        address acceptor;
+        address arbiter;
+        address fundToken;
+        uint256 amount;
+        uint256 deadline;
+        bool accepted;
+        string message;
+    }
+
+    event BetCreated(
+        address indexed betAddress,
+        address indexed initiator,
+        address indexed arbiter,
+        address fundToken,
+        uint256 amount,
+        uint256 deadline
+    );
+
+    event BetAccepted(
+        address indexed betAddress,
+        address indexed acceptor,
+        address indexed fundToken,
+        uint256 amount,
+        uint256 deadline
+    );
+
+    event BetWon(
+        address indexed betAddress,
+        address indexed winner,
+        address indexed arbiter,
+        address fundToken,
+        uint256 amount
+    );
+
+    event BetSettled(
+        address indexed betAddress,
+        address indexed winner,
+        address indexed arbiter,
+        address fundToken,
+        uint256 amount
+    );
+}
