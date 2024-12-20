@@ -9,17 +9,19 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract BetFactory is Ownable, IShakeOnIt {
+    address private multiSigWallet;
     address public implementation;
     uint256 public instances;
     DataCenter private dataCenter;
 
-    constructor() Ownable(msg.sender) {
+    constructor(address _multiSig) Ownable(msg.sender) {
         implementation = address(new Bet());
         dataCenter = new DataCenter(address(this));
+        multiSigWallet = _multiSig;
     }
 
     /**
-     * @dev Create a new bet
+     * @dev Deploy a new bet
      * @param _initiator The address of the user creating the bet
      * @param _arbiter The address of the arbiter
      * @param _fundToken The address of the token to be used for the bet
@@ -27,13 +29,14 @@ contract BetFactory is Ownable, IShakeOnIt {
      * @param _deadline The deadline for the bet
      * @param _condition The condition of the bet
      */
-    function createBet(
+    function deployBet(
         address _initiator,
         address _arbiter,
         address _fundToken,
         uint256 _amount,
+        uint256 _arbiterFee,
+        uint256 _platformFee,
         uint256 _deadline,
-        uint256 _arbiterPercentage,
         string memory _condition
     ) external returns (address) {
         require(_amount > 0, "Amount should be greater than 0");
@@ -48,27 +51,24 @@ contract BetFactory is Ownable, IShakeOnIt {
 
         // Create a new bet clone
         address bet = Clones.clone(implementation);
-
-        // get the current platform percentage
-        uint256 platformPercentage = dataCenter.getPlatformPercentage();
-
         // Initialize the bet clone
         Bet(bet).initialize(
+            multiSigWallet,
             address(dataCenter),
             msg.sender,
             _arbiter,
             _fundToken,
             _amount,
             _deadline,
-            _arbiterPercentage,
-            platformPercentage,
+            _arbiterFee,
+            _platformFee,
             _condition
         );
 
         // increment the number of instances
         instances++;
-        // store the proposal in the data center
-        dataCenter.saveBet(
+        // store the bet details in the data center
+        dataCenter.createBet(
             bet,
             msg.sender,
             _arbiter,

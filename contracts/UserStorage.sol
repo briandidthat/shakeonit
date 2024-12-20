@@ -12,7 +12,8 @@ contract UserStorage is IShakeOnIt, Ownable {
     uint256 private victories;
     uint256 private losses;
     address[] private activeBets;
-    mapping(address => Wager) public wagers;
+    mapping(address => BetDetails) public betDetails;
+    mapping(address => address) public betContracts;
 
     modifier onlyDataCenter() {
         require(msg.sender == dataCenter, "Restricted to DataCenter");
@@ -24,7 +25,7 @@ contract UserStorage is IShakeOnIt, Ownable {
     }
 
     /**
-     * @dev Create a bet
+     * @dev Save a new bet
      * @param _betContract address of the bet contract
      * @param _arbiter address of the arbiter
      * @param _fundToken address of the token to be used for the bet
@@ -32,7 +33,7 @@ contract UserStorage is IShakeOnIt, Ownable {
      * @param _deadline deadline for the bet
      * @param _message message for the bet
      */
-    function createBet(
+    function saveBet(
         address _betContract,
         address _arbiter,
         address _fundToken,
@@ -40,9 +41,9 @@ contract UserStorage is IShakeOnIt, Ownable {
         uint256 _deadline,
         string memory _message
     ) external onlyDataCenter {
-        Wager memory wager = Wager({
+        BetDetails memory BetDetails = BetDetails({
             betContract: _betContract,
-            proposer: owner(),
+            initiator: owner(),
             acceptor: address(0),
             arbiter: _arbiter,
             fundToken: _fundToken,
@@ -53,38 +54,80 @@ contract UserStorage is IShakeOnIt, Ownable {
         });
 
         // Store the proposal
-        wagers[_betContract] = wager;
+        betDetails[_betContract] = BetDetails;
         activeBets.push(_betContract);
     }
 
     /**
-     * @dev Accept a bet
-     * @param _wager Wager struct
+     * @dev Update the bet status
+     * @param _betDetails BetDetails struct
      */
-    function acceptBet(Wager memory _wager) external onlyDataCenter {
-        Wager memory liveBet = Wager({
-            betContract: _wager.betContract,
-            proposer: _wager.proposer,
+    function finalizeBet(BetDetails memory _betDetails) external {
+        // this function should be called by the bet contract itself
+        BetDetails storage bet = betDetails[msg.sender];
+        require(bet.betContract == msg.sender, "Invalid bet contract");
+
+        // update the bet status
+        betDetails[_betDetails.betContract] = _betDetails;
+    }
+
+    /**
+     * @dev Accept a bet
+     * @param _betDetails BetDetails struct
+     */
+    function acceptBet(BetDetails memory _betDetails) external onlyDataCenter {
+        // update the bet status
+        BetDetails memory liveBet = BetDetails({
+            betContract: _betDetails.betContract,
+            initiator: _betDetails.initiator,
             acceptor: owner(),
-            arbiter: _wager.arbiter,
-            fundToken: _wager.fundToken,
-            amount: _wager.amount,
+            arbiter: _betDetails.arbiter,
+            fundToken: _betDetails.fundToken,
+            amount: _betDetails.amount,
             accepted: true,
-            deadline: _wager.deadline,
-            message: _wager.message
+            deadline: _betDetails.deadline,
+            message: _betDetails.message
         });
         // store the livebet
-        wagers[_wager.betContract] = liveBet;
+        betDetails[_betDetails.betContract] = liveBet;
+    }
+
+    /**
+     * @dev Cancel a bet
+     * @param _betContract address of the bet contract
+     */
+    function cancelBet(address _betContract) external onlyDataCenter {
+        // remove the bet from the active bets
+        for (uint256 i = 0; i < activeBets.length; i++) {
+            if (activeBets[i] == _betContract) {
+                activeBets[i] = activeBets[activeBets.length - 1];
+                activeBets.pop();
+                break;
+            }
+        }
+        // delete the bet
+        delete betDetails[_betContract];
+    }
+
+    /**
+     * @dev Get a bet
+     * @param _betContract address of the bet contract
+     * @return BetDetails struct
+     */
+    function getBetDetails(
+        address _betContract
+    ) external view returns (BetDetails memory) {
+        return betDetails[_betContract];
     }
 
     /**
      * @dev Get all the bets
-     * @return Wager[] array of bets
+     * @return BetDetails[] array of bets
      */
-    function getBets() external view returns (Wager[] memory) {
-        Wager[] memory _bets = new Wager[](activeBets.length);
+    function getBets() external view returns (BetDetails[] memory) {
+        BetDetails[] memory _bets = new BetDetails[](activeBets.length);
         for (uint256 i = 0; i < activeBets.length; i++) {
-            _bets[i] = wagers[activeBets[i]];
+            _bets[i] = betDetails[activeBets[i]];
         }
         return _bets;
     }

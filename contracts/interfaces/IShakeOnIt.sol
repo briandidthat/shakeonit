@@ -6,12 +6,13 @@ interface IShakeOnIt {
         INITIATED,
         FUNDED,
         WON,
-        SETTLED
+        SETTLED,
+        CANCELLED
     }
 
-    struct Wager {
+    struct BetDetails {
         address betContract;
-        address proposer;
+        address initiator;
         address acceptor;
         address arbiter;
         address fundToken;
@@ -53,4 +54,7 @@ interface IShakeOnIt {
         address fundToken,
         uint256 amount
     );
+
+    event BetCancelled(address indexed betAddress, address indexed initiator);
+    event ArbiterBlocked(address indexed arbiter, string reason);
 }
