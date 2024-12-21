@@ -11,6 +11,7 @@ contract DataCenter is IShakeOnIt, Ownable {
     address[] private users;
     address[] private arbiters;
     address[] private blockedArbiters;
+    mapping(address => bool) private isBet;
     mapping(address => bool) private isUser;
     mapping(address => bool) private isArbiter;
     mapping(address => bool) private isArbiterBlocked;
@@ -41,17 +42,19 @@ contract DataCenter is IShakeOnIt, Ownable {
         string memory _message
     ) external onlyOwner {
         address userStorageAddress = userStorageRegistry[_initiator];
-        UserStorage storageContract;
+        UserStorage userStorage;
         // create a new user storage contract if the user doesn't have one yet
         if (userStorageAddress == address(0)) {
-            storageContract = new UserStorage(_initiator, address(this));
-            userStorageAddress = address(storageContract);
+            userStorage = new UserStorage(_initiator, address(this));
+            userStorageAddress = address(userStorage);
             userStorageRegistry[_initiator] = userStorageAddress;
+            users.push(_initiator);
+            isUser[_initiator] = true;
         } else {
-            storageContract = UserStorage(userStorageAddress);
+            userStorage = UserStorage(userStorageAddress);
         }
         // store the new bet in the user storage
-        storageContract.saveBet(
+        userStorage.saveBet(
             _betContract,
             _arbiter,
             _fundToken,
@@ -59,13 +62,10 @@ contract DataCenter is IShakeOnIt, Ownable {
             _deadline,
             _message
         );
-        // if the initiator is a new user, add them to the user list
-        if (!isUser[_initiator]) {
-            users.push(_initiator);
-            isUser[_initiator] = true;
-        }
         // add the bet to the list of deployed bets
         deployedBets.push(_betContract);
+        // add the bet to bet mapping
+        isBet[_betContract] = true;
         // emit BetCreated event
         emit BetCreated(
             _betContract,
@@ -78,20 +78,57 @@ contract DataCenter is IShakeOnIt, Ownable {
     }
 
     /**
+     * @notice Updates the bet details in the user storage contract
+     * @param _betDetails The BetDetails details to be updated
+     * @custom:access Only a bet contract
+     */
+    function updateBet(BetDetails memory _betDetails) external {
+        require(
+            isBet[_betDetails.betContract],
+            "Only a bet contract can call this function"
+        );
+
+        // get the user storage contract address for both the initiator and the acceptor
+        address initiatorStorage = userStorageRegistry[_betDetails.initiator];
+        address acceptorStorage = userStorageRegistry[_betDetails.acceptor];
+        // update the bet in the user storage for both the initiator and the acceptor
+        UserStorage(initiatorStorage).updateBet(_betDetails);
+        UserStorage(acceptorStorage).updateBet(_betDetails);
+
+        // emit BetUpdated event
+        emit BetUpdated(_betDetails);
+    }
+
+    /**
      * @notice This function is called when a bet is accepted.
      * @param _betDetails The BetDetails details including proposer and acceptor addresses.
      * @dev Updates the bet status in the user storage contract and registers the acceptor if they are a new user.
      */
     function betAccepted(BetDetails memory _betDetails) external {
-        address userStorageAddress = userStorageRegistry[_betDetails.initiator];
-        UserStorage storageContract = UserStorage(userStorageAddress);
-        // update the bet status in the user storage
-        storageContract.acceptBet(_betDetails);
+        require(
+            isBet[msg.sender],
+            "Only a bet contract can call this function"
+        );
+        address acceptorStorage;
+        address acceptor = _betDetails.acceptor;
+        address initiatorStorage = userStorageRegistry[_betDetails.initiator];
+
         // if the acceptor is a new user, add them to the user list and marks them as a user.
         if (!isUser[_betDetails.acceptor]) {
-            users.push(_betDetails.acceptor);
-            isUser[_betDetails.acceptor] = true;
+            /// @dev Create a new user storage contract for the acceptor
+            UserStorage newStorage = new UserStorage(acceptor, address(this));
+            acceptorStorage = address(newStorage);
+            userStorageRegistry[acceptor] = acceptorStorage;
+            users.push(acceptor);
+            isUser[acceptor] = true;
+        } else {
+            // get the user storage contract address
+            acceptorStorage = userStorageRegistry[_betDetails.acceptor];
         }
+
+        // update the bet status for both the initiator and the acceptor
+        UserStorage(initiatorStorage).updateBet(_betDetails);
+        UserStorage(acceptorStorage).updateBet(_betDetails);
 
         // emit BetAccepted event
         emit BetAccepted(
@@ -110,15 +147,13 @@ contract DataCenter is IShakeOnIt, Ownable {
      */
     function cancelBet(address _betContract, address _initiator) external {
         address userStorageAddress = userStorageRegistry[_initiator];
-        UserStorage storageContract = UserStorage(userStorageAddress);
+        UserStorage userStorage = UserStorage(userStorageAddress);
 
-        BetDetails memory betDetails = storageContract.getBetDetails(
-            _betContract
-        );
+        BetDetails memory betDetails = userStorage.getBetDetails(_betContract);
         require(betDetails.initiator == _initiator, "Restricted to initiator");
 
         // update the bet status in the user storage
-        storageContract.cancelBet(_betContract);
+        userStorage.cancelBet(_betContract);
         emit BetCancelled(_betContract, msg.sender);
     }
 
@@ -237,10 +272,8 @@ contract DataCenter is IShakeOnIt, Ownable {
         address _user
     ) external view returns (BetDetails memory) {
         address userStorageAddress = userStorageRegistry[_user];
-        UserStorage storageContract = UserStorage(userStorageAddress);
-        BetDetails memory betDetails = storageContract.getBetDetails(
-            _betContract
-        );
+        UserStorage userStorage = UserStorage(userStorageAddress);
+        BetDetails memory betDetails = userStorage.getBetDetails(_betContract);
         return betDetails;
     }
 }

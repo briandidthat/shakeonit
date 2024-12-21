@@ -76,7 +76,7 @@ contract Bet is IShakeOnIt, Initializable {
     /**
      * @notice Accepts the bet and funds the escrow.
      */
-    function acceptBet() external {
+    function acceptBet() external returns (BetDetails memory) {
         require(
             status == BetStatus.INITIATED,
             "Bet must be in initiated status"
@@ -105,6 +105,7 @@ contract Bet is IShakeOnIt, Initializable {
         betDetails.acceptor = msg.sender;
         // send updated bet details to the data center
         dataCenter.betAccepted(betDetails);
+        return betDetails;
     }
 
     /**
@@ -144,13 +145,23 @@ contract Bet is IShakeOnIt, Initializable {
         winner = _winner;
         // update the status of the bet
         status = BetStatus.WON;
-
-        // transfer the funds to the arbiter
-        IERC20 token = IERC20(address(fundToken));
         require(
-            token.transfer(arbiter, arbiterFee),
+            fundToken.transfer(arbiter, arbiterFee),
             "Token transfer to arbiter failed"
         );
+        // update the balance of the arbiter
+        balances[msg.sender] = 0;
+
+        // get the bet details from the data center
+        BetDetails memory betDetails = dataCenter.getBetDetails(
+            address(this),
+            _winner
+        );
+        // update the bet details
+        betDetails.winner = _winner;
+        // send updated bet details to the data center
+        dataCenter.updateBet(betDetails);
+
         // emit BetWon event
         emit BetWon(address(this), winner, arbiter, address(fundToken), amount);
         // return the arbiter fee
@@ -177,8 +188,6 @@ contract Bet is IShakeOnIt, Initializable {
         balances[msg.sender] = 0;
         // update the status of the bet
         status = BetStatus.SETTLED;
-
-        
 
         emit BetSettled(
             address(this),

@@ -15,6 +15,7 @@ interface IShakeOnIt {
         address initiator;
         address acceptor;
         address arbiter;
+        address winner;
         address fundToken;
         uint256 amount;
         uint256 deadline;
@@ -37,6 +38,10 @@ interface IShakeOnIt {
         address indexed fundToken,
         uint256 amount,
         uint256 deadline
+    );
+
+    event BetUpdated(
+        BetDetails betDetails
     );
 
     event BetWon(
