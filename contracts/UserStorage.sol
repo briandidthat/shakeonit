@@ -14,6 +14,7 @@ contract UserStorage is IShakeOnIt, Ownable {
     address[] private bets;
     mapping(address => BetDetails) public betDetailsRegistry;
     mapping(address => address) public betContracts;
+    mapping(address => uint256) public balances;
 
     modifier onlyDataCenter() {
         require(msg.sender == dataCenter, "Restricted to DataCenter");
@@ -25,41 +26,43 @@ contract UserStorage is IShakeOnIt, Ownable {
     }
 
     /**
-     * @dev Save a bet
-     * @param _betContract address of the bet contract
-     * @param _arbiter address of the arbiter
-     * @param _fundToken address of the fund token
-     * @param _amount amount of the bet
-     * @param _deadline deadline of the bet
-     * @param _message message of the bet
-     * @return _betDetails BetDetails struct
+     * @dev Deposit tokens
+     * @param _token address of the token
+     * @param _amount amount of the token
      */
-    function saveBet(
-        address _betContract,
-        address _arbiter,
-        address _fundToken,
-        uint256 _amount,
-        uint256 _deadline,
-        string memory _message
-    ) external onlyDataCenter returns (BetDetails memory _betDetails) {
-        BetDetails memory betDetails = BetDetails({
-            betContract: _betContract,
-            initiator: owner(),
-            acceptor: address(0),
-            arbiter: _arbiter,
-            winner: address(0),
-            fundToken: _fundToken,
-            amount: _amount,
-            accepted: false,
-            deadline: _deadline,
-            message: _message
-        });
+    function deposit(address _token, uint256 _amount) external onlyOwner {
+        IERC20 token = IERC20(_token);
+        require(
+            token.transferFrom(msg.sender, address(this), _amount),
+            "Transfer failed"
+        );
+        balances[_token] = _amount;
+    }
+
+    /**
+     * @dev Withdraw tokens
+     * @param _token address of the token
+     * @param _amount amount of the token
+     */
+    function withdraw(address _token, uint256 _amount) external onlyOwner {
+        require(balances[_token] >= _amount, "Insufficient balance");
+        IERC20 token = IERC20(_token);
+        require(token.transfer(msg.sender, _amount), "Transfer failed");
+        balances[_token] -= _amount;
+    }
+
+    /**
+     * @dev store a bet contract
+     * @param _betDetails BetDetails struct
+     */
+    function saveBet(BetDetails memory _betDetails) external onlyDataCenter {
+        // set bet status to initiated
+        _betDetails.status = BetStatus.INITIATED;
 
         // Store the proposal
-        betDetailsRegistry[_betContract] = betDetails;
-        bets.push(_betContract);
-        // return the bet details
-        _betDetails = betDetails;
+        betDetailsRegistry[_betDetails.betContract] = _betDetails;
+        bets.push(_betDetails.betContract);
+        betCount++;
     }
 
     /**
@@ -92,6 +95,8 @@ contract UserStorage is IShakeOnIt, Ownable {
         }
         // delete the bet
         delete betDetailsRegistry[_betContract];
+        // decrement the bet count
+        betCount--;
     }
 
     /**
@@ -117,7 +122,19 @@ contract UserStorage is IShakeOnIt, Ownable {
         return _bets;
     }
 
+    /**
+     * @dev Get the number of bets
+     * @return uint256 number of bets
+     */
     function getBetCount() external view returns (uint256) {
         return betCount;
+    }
+
+    /**
+     * @dev Get balance of the provided token
+     * @return uint256 balance of the token
+     */
+    function getTokenBalance(address _token) external view returns (uint256) {
+        return balances[_token];
     }
 }

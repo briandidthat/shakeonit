@@ -7,15 +7,10 @@ import "./Bet.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract Arbiter is IShakeOnIt, Ownable {
-    enum Status {
-        ACTIVE,
-        SUSPENDED,
-        BLOCKED
-    }
     address private dataCenter;
     uint256 private feesCollected;
     uint256 private betsJudged;
-    Status private status;
+    ArbiterStatus private status;
     address[] private bets;
     mapping(address => uint256) private balances;
     mapping(address => bool) public betWasDeclared;
@@ -23,7 +18,12 @@ contract Arbiter is IShakeOnIt, Ownable {
 
     constructor(address _owner, address _dataCenter) Ownable(_owner) {
         dataCenter = _dataCenter;
-        status = Status.ACTIVE;
+        status = ArbiterStatus.ACTIVE;
+    }
+
+    modifier onlyDataCenter() {
+        require(msg.sender == dataCenter, "Restricted to data center");
+        _;
     }
 
     /**
@@ -34,13 +34,14 @@ contract Arbiter is IShakeOnIt, Ownable {
      */
     function declareWinner(
         address _betContract,
-        address _winner
+        address _winner,
+        address _loser
     ) external onlyOwner {
         require(betIsActive[_betContract], "Bet is not active");
         require(!betWasDeclared[_betContract], "Winner already declared");
         // declare winner
         Bet bet = Bet(_betContract);
-        uint256 payment = bet.declareWinner(_winner);
+        uint256 payment = bet.declareWinner(_winner, _loser);
         // update stats
         feesCollected += payment;
         betsJudged++;
@@ -66,6 +67,10 @@ contract Arbiter is IShakeOnIt, Ownable {
         balances[_token] -= _amount;
     }
 
+    function setArbiterStatus(ArbiterStatus _status) external onlyDataCenter {
+        status = _status;
+    }
+
     function getBetsJudged() external view returns (uint256) {
         return betsJudged;
     }
@@ -82,7 +87,7 @@ contract Arbiter is IShakeOnIt, Ownable {
         return balances[_token];
     }
 
-    function getStatus() external view returns (Status) {
-        return Status.ACTIVE;
+    function getStatus() external view returns (ArbiterStatus) {
+        return status;
     }
 }
