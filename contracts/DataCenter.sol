@@ -3,179 +3,180 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./UserStorage.sol";
+import "./Arbiter.sol";
 import "./interfaces/IShakeOnIt.sol";
 
 contract DataCenter is IShakeOnIt, Ownable {
-    uint256 private platformPercentage;
     address[] private deployedBets;
     address[] private users;
     address[] private arbiters;
     address[] private blockedArbiters;
+    mapping(address => bool) private isBet;
     mapping(address => bool) private isUser;
     mapping(address => bool) private isArbiter;
-    mapping(address => bool) private isArbiterBlocked;
     mapping(address => address) private userStorageRegistry;
+    mapping(address => address) private arbiterRegistry;
 
     constructor(address _factory) Ownable(_factory) {}
 
-    /**
-     * @notice Saves a new bet to the user's storage contract
-     * @dev Creates a new UserStorage contract if user doesn't have one yet
-     * @param _betContract Address of the bet contract
-     * @param _initiator Address of the user initiating the bet
-     * @param _arbiter Address of the arbiter for this bet
-     * @param _fundToken Address of the token used for betting
-     * @param _amount Amount of tokens to be bet
-     * @param _deadline Timestamp when the bet expires
-     * @param _message Description or terms of the bet
-     * @custom:access Only owner
-     */
-    function saveBet(
-        address _betContract,
-        address _initiator,
-        address _arbiter,
-        address _fundToken,
-        uint256 _amount,
-        uint256 _deadline,
-        string memory _message
-    ) external onlyOwner {
-        address userStorageAddress = userStorageRegistry[_initiator];
-        UserStorage storageContract;
-
-        if (userStorageAddress == address(0)) {
-            storageContract = new UserStorage(_initiator, address(this));
-            userStorageAddress = address(storageContract);
-            userStorageRegistry[_initiator] = userStorageAddress;
-        } else {
-            storageContract = UserStorage(userStorageAddress);
-        }
+    function createBet(BetDetails memory _betDetails) external onlyOwner {
+        address userStorageAddress = userStorageRegistry[_betDetails.initiator];
+        // if the user doesn't have a storage contract, throw an error
+        require(userStorageAddress != address(0), "User not registered");
+        UserStorage userStorage = UserStorage(userStorageAddress);
         // store the new bet in the user storage
-        storageContract.createBet(
-            _betContract,
-            _arbiter,
-            _fundToken,
-            _amount,
-            _deadline,
-            _message
-        );
-        // if the initiator is a new user, add them to the user list
-        if (!isUser[_initiator]) {
-            users.push(_initiator);
-            isUser[_initiator] = true;
-        }
+        userStorage.saveBet(_betDetails);
         // add the bet to the list of deployed bets
-        deployedBets.push(_betContract);
+        deployedBets.push(_betDetails.betContract);
+        // add the bet to isBet mapping
+        isBet[_betDetails.betContract] = true;
+        // emit BetCreated event
+        emit BetCreated(
+            _betDetails.betContract,
+            _betDetails.initiator,
+            _betDetails.arbiter,
+            _betDetails.fundToken,
+            _betDetails.amount,
+            _betDetails.deadline
+        );
     }
 
-    /**
-     * @notice This function is called when a bet is accepted.
-     * @param _wager The wager details including proposer and acceptor addresses.
-     * @dev Updates the bet status in the user storage contract and registers the acceptor if they are a new user.
-     */
-    function betAccepted(Wager memory _wager) external {
-        address userStorageAddress = userStorageRegistry[_wager.proposer];
-        UserStorage storageContract = UserStorage(userStorageAddress);
-        // update the bet status in the user storage
-        storageContract.acceptBet(_wager);
-        // if the acceptor is a new user, add them to the user list and marks them as a user.
-        if (!isUser[_wager.acceptor]) {
-            users.push(_wager.acceptor);
-            isUser[_wager.acceptor] = true;
-        }
-
+    function acceptBet(BetDetails memory _betDetails) external {
+        require(
+            isBet[msg.sender],
+            "Only a bet contract can call this function"
+        );
+        // get the user storage contract address for both the initiator and the acceptor
+        address acceptorStorage = userStorageRegistry[_betDetails.acceptor];
+        address initiatorStorage = userStorageRegistry[_betDetails.initiator];
+        // save the bet for the acceptor
+        UserStorage(acceptorStorage).saveBet(_betDetails);
+        // update the bet status for the initiator
+        UserStorage(initiatorStorage).updateBet(_betDetails);
         // emit BetAccepted event
         emit BetAccepted(
-            _wager.betContract,
-            _wager.acceptor,
-            _wager.fundToken,
-            _wager.amount,
-            _wager.deadline
+            _betDetails.betContract,
+            _betDetails.acceptor,
+            _betDetails.fundToken,
+            _betDetails.amount,
+            _betDetails.deadline
         );
     }
 
-    /**
-     * @dev Block an arbiter
-     * @param _arbiter The address of the arbiter to be blocked
-     */
-    function blockArbiter(address _arbiter) external onlyOwner {
-        require(_arbiter != address(0), "Zero address not allowed");
-        require(!isArbiterBlocked[_arbiter], "Arbiter already blocked");
-        // block the specified arbiter
-        blockedArbiters.push(_arbiter);
+    function declareWinner(
+        address _betContract,
+        address _arbiter,
+        address _winner,
+        address _loser
+    ) external {
+        require(isBet[_betContract], "Bet not found");
+        require(isArbiter[_arbiter], "Arbiter not found");
+        // get the user storage address for both the winner and the loser
+        address winnerStorageAddress = userStorageRegistry[_arbiter];
+        address loserStorageAddress = userStorageRegistry[_loser];
+        // get the user storage contracts
+        UserStorage winnerStorage = UserStorage(winnerStorageAddress);
+        UserStorage loserStorage = UserStorage(loserStorageAddress);
+        // get the bet details from the winner's storage
+        BetDetails memory betDetails = winnerStorage.getBetDetails(
+            _betContract
+        );
+        require(betDetails.status == BetStatus.FUNDED, "Bet not funded");
+        // update the bet status to 'won' and set the winner
+        betDetails.status = BetStatus.WON;
+        betDetails.winner = _winner;
+        // update the bet details in both the winner's and loser's storage
+        winnerStorage.updateBet(betDetails);
+        loserStorage.updateBet(betDetails);
+        // emit BetWon event
+        emit BetWon(
+            _betContract,
+            _winner,
+            _arbiter,
+            betDetails.fundToken,
+            betDetails.amount
+        );
     }
 
-    /**
-     * @dev Add an arbiter
-     * @param _arbiter The address of the arbiter to be added
-     */
+    function cancelBet(address _betContract, address _initiator) external {
+        address userStorageAddress = userStorageRegistry[_initiator];
+        UserStorage userStorage = UserStorage(userStorageAddress);
+        // get the bet details from the user storage
+        BetDetails memory betDetails = userStorage.getBetDetails(_betContract);
+        require(betDetails.initiator == _initiator, "Restricted to initiator");
+        require(betDetails.status != BetStatus.FUNDED, "Bet already funded");
+        // update the bet status in the user storage. We do not need to do this
+        // for the acceptor since the bet is not funded yet, so no acceptor exists
+        userStorage.cancelBet(_betContract);
+        // emit BetCancelled event
+        emit BetCancelled(_betContract, msg.sender);
+    }
+
+    function addUser(address _user) external onlyOwner returns (address) {
+        require(!isUser[_user], "User already registered");
+        // create a new user storage contract
+        UserStorage userStorage = new UserStorage(_user, address(this));
+        address userStorageAddress = address(userStorage);
+        // store the user storage contract address and add the user to the list of users
+        userStorageRegistry[_user] = userStorageAddress;
+        users.push(_user);
+        isUser[_user] = true;
+        // emit UserAdded event
+        emit UserAdded(_user, userStorageAddress);
+        // return the user storage contract address
+        return userStorageAddress;
+    }
+
+    function blockArbiter(
+        address _arbiter,
+        string memory _reason
+    ) external onlyOwner {
+        require(isArbiter[_arbiter], "Arbiter not found");
+
+        address arbiterContractAddress = arbiterRegistry[_arbiter];
+        Arbiter arbiter = Arbiter(arbiterContractAddress);
+        arbiter.setArbiterStatus(ArbiterStatus.BLOCKED);
+        // emit ArbiterBlocked event
+        emit ArbiterBlocked(_arbiter, _reason);
+    }
+
     function addArbiter(address _arbiter) external onlyOwner {
         require(_arbiter != address(0), "Zero address not allowed");
         require(!isArbiter[_arbiter], "Arbiter already added");
-        // add the specified arbiter
+        // add the arbiter
         arbiters.push(_arbiter);
     }
 
-    /**
-     * @dev Get user storage address
-     * @param _user The address of the user
-     */
+    function setNewFactory(address _newFactory) external onlyOwner {
+        require(_newFactory != address(0), "Zero address not allowed");
+        require(_newFactory != owner(), "Owner cannot be the new factory");
+        // transfer ownership to the new factory
+        _transferOwnership(_newFactory);
+    }
+
     function getUserStorage(address _user) external view returns (address) {
-        require(isUser[msg.sender], "User has not created any bet");
+        require(isUser[msg.sender], "User has not registered");
         return userStorageRegistry[_user];
     }
 
-    /**
-     * @dev Get the list of all users
-     */
+    function getArbiter(address _arbiter) external view returns (address) {
+        require(isArbiter[msg.sender], "Arbiter not found");
+        return arbiterRegistry[_arbiter];
+    }
+
     function getUsers() external view returns (address[] memory) {
         return users;
     }
 
-    /**
-     * @dev Get the list of all arbiters
-     */
     function getArbiters() external view returns (address[] memory) {
         return arbiters;
     }
 
-    /**
-     * @dev Get the list of all blocked arbiters
-     */
     function getBlockedArbiters() external view returns (address[] memory) {
         return blockedArbiters;
     }
 
-    /**
-     * @dev Get the list of all bets
-     */
     function getBets() external view returns (address[] memory) {
         return deployedBets;
-    }
-
-    /**
-     * @notice Sets a new factory address and transfers ownership to the new factory.
-     * @dev This function can only be called by the current owner.
-     * @param _factory The address of the new factory to be set.
-     */
-    function setNewFactory(address _factory) external onlyOwner {
-        _transferOwnership(_factory);
-    }
-
-    /**
-     * @notice Sets the platform percentage
-     * @dev This function can only be called by the current owner.
-     * @param _platformPercentage The new platform percentage to be set.
-     */
-    function setPlatformPercentage(
-        uint256 _platformPercentage
-    ) external onlyOwner {
-        platformPercentage = _platformPercentage;
-    }
-
-    /**
-     * @notice Gets the platform percentage
-     */
-    function getPlatformPercentage() external view returns (uint256) {
-        return platformPercentage;
     }
 }
