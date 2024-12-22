@@ -10,17 +10,25 @@ interface IShakeOnIt {
         CANCELLED
     }
 
+    enum ArbiterStatus {
+        ACTIVE,
+        SUSPENDED,
+        BLOCKED
+    }
+
     struct BetDetails {
         address betContract;
         address initiator;
         address acceptor;
         address arbiter;
         address winner;
+        address loser;
         address fundToken;
         uint256 amount;
         uint256 deadline;
         bool accepted;
         string message;
+        BetStatus status;
     }
 
     event BetCreated(
@@ -40,9 +48,7 @@ interface IShakeOnIt {
         uint256 deadline
     );
 
-    event BetUpdated(
-        BetDetails betDetails
-    );
+    event BetUpdated(BetDetails betDetails);
 
     event BetWon(
         address indexed betAddress,
@@ -60,6 +66,7 @@ interface IShakeOnIt {
         uint256 amount
     );
 
+    event UserAdded(address indexed user, address indexed userStorage);
     event BetCancelled(address indexed betAddress, address indexed initiator);
     event ArbiterBlocked(address indexed arbiter, string reason);
 }

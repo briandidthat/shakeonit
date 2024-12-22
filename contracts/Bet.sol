@@ -85,26 +85,28 @@ contract Bet is IShakeOnIt, Initializable {
             balances[msg.sender] == 0,
             "Participant has already funded the escrow"
         );
+        // get the user storage address and perform the token transfer
+        address userStorageAddress = dataCenter.getUserStorage(msg.sender);
+        require(userStorageAddress != address(0), "User has not registered");
         require(
-            fundToken.transferFrom(msg.sender, address(this), amount),
+            fundToken.transferFrom(userStorageAddress, address(this), amount),
             "Token transfer failed"
         );
 
         // update the balance of the acceptor
-        acceptor = msg.sender;
-        balances[msg.sender] = amount;
+        acceptor = userStorageAddress;
+        balances[userStorageAddress] = amount;
         status = BetStatus.FUNDED;
 
-        // get the bet details from the data center
-        BetDetails memory betDetails = dataCenter.getBetDetails(
-            address(this),
-            msg.sender
+        // get the bet details from the user storage
+        BetDetails memory betDetails = UserStorage(initiator).getBetDetails(
+            address(this)
         );
         // update the state
         betDetails.accepted = true;
-        betDetails.acceptor = msg.sender;
+        betDetails.acceptor = userStorageAddress;
         // send updated bet details to the data center
-        dataCenter.betAccepted(betDetails);
+        dataCenter.acceptBet(betDetails);
         return betDetails;
     }
 
@@ -113,13 +115,18 @@ contract Bet is IShakeOnIt, Initializable {
      * @dev This function can only be called by the initiator.
      */
     function cancelBet() external {
-        require(msg.sender == initiator, "Restricted to initiator");
+        address userStorageAddress = dataCenter.getUserStorage(msg.sender);
+        require(userStorageAddress == initiator, "Restricted to initiator");
+
         require(
             status == BetStatus.INITIATED,
             "Bet must be in initiated status"
         );
         require(acceptor == address(0), "Bet has been already been accepted");
-        require(fundToken.transfer(initiator, amount), "Token transfer failed");
+        require(
+            fundToken.transfer(userStorageAddress, amount),
+            "Token transfer failed"
+        );
 
         // update the balance of the initiator
         balances[initiator] = 0;
@@ -135,7 +142,8 @@ contract Bet is IShakeOnIt, Initializable {
      * @return _arbiterFee amount paid to the arbiter.
      */
     function declareWinner(
-        address _winner
+        address _winner,
+        address _loser
     ) external onlyArbiter returns (uint256 _arbiterFee) {
         require(_winner == initiator || _winner == acceptor, "Invalid winner"); // ensure the winner is a participant
         require(status == BetStatus.FUNDED, "Bet has not been funded yet"); // ensure the bet is funded
@@ -152,15 +160,22 @@ contract Bet is IShakeOnIt, Initializable {
         // update the balance of the arbiter
         balances[msg.sender] = 0;
 
-        // get the bet details from the data center
-        BetDetails memory betDetails = dataCenter.getBetDetails(
-            address(this),
-            _winner
+        // get the bet details from userStorage
+        BetDetails memory betDetails = UserStorage(_winner).getBetDetails(
+            address(this)
         );
         // update the bet details
         betDetails.winner = _winner;
+        betDetails.loser = _loser;
+        // update the status
+        betDetails.status = BetStatus.WON;
         // send updated bet details to the data center
-        dataCenter.updateBet(betDetails);
+        dataCenter.declareWinner(
+            betDetails.betContract,
+            betDetails.arbiter,
+            _winner,
+            _loser
+        );
 
         // emit BetWon event
         emit BetWon(address(this), winner, arbiter, address(fundToken), amount);
@@ -169,11 +184,12 @@ contract Bet is IShakeOnIt, Initializable {
     }
 
     function withdrawEarnings() external onlyParties {
-        require(msg.sender == winner, "Restricted to winner");
+        address userStorageAddress = dataCenter.getUserStorage(msg.sender);
+        require(userStorageAddress == winner, "Restricted to winner");
+        require(balances[userStorageAddress] > 0, "No funds to withdraw");
         require(status == BetStatus.WON, "Bet has not been declared won yet");
-        require(balances[msg.sender] > 0, "No funds to withdraw");
 
-        // transfer the platform fee to the factory
+        // transfer the platform fee to the multisig wallet
         require(
             fundToken.transfer(multiSigWallet, platformFee),
             "Token transfer failed"
@@ -181,17 +197,17 @@ contract Bet is IShakeOnIt, Initializable {
 
         // transfer the funds to the winner
         require(
-            fundToken.transfer(msg.sender, payout),
+            fundToken.transfer(userStorageAddress, payout),
             "Token transfer failed"
         );
         // update the balance of the participant
-        balances[msg.sender] = 0;
+        balances[userStorageAddress] = 0;
         // update the status of the bet
         status = BetStatus.SETTLED;
 
         emit BetSettled(
             address(this),
-            msg.sender,
+            userStorageAddress,
             arbiter,
             address(fundToken),
             amount
