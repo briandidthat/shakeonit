@@ -7,6 +7,11 @@ import "./Bet.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract Arbiter is IShakeOnIt, Ownable {
+    enum ArbiterStatus {
+        ACTIVE,
+        SUSPENDED,
+        BLOCKED
+    }
     address private dataCenter;
     uint256 private feesCollected;
     uint256 private betsJudged;
@@ -35,22 +40,23 @@ contract Arbiter is IShakeOnIt, Ownable {
     function declareWinner(
         address _betContract,
         address _winner,
-        address _loser
+        address _loser,
+        uint256 _payment
     ) external onlyOwner {
         require(betIsActive[_betContract], "Bet is not active");
         require(!betWasDeclared[_betContract], "Winner already declared");
         // declare winner
         Bet bet = Bet(_betContract);
-        uint256 payment = bet.declareWinner(_winner, _loser);
+        bet.declareWinner(_winner, _loser);
         // update stats
-        feesCollected += payment;
+        feesCollected += _payment;
         betsJudged++;
         // update bet state
         betWasDeclared[_betContract] = true;
         betIsActive[_betContract] = false;
         // update arbiter balance
         address token = bet.getFundToken();
-        balances[token] += payment;
+        balances[token] += _payment;
     }
 
     /**

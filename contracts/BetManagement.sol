@@ -83,7 +83,6 @@ contract BetManagement is Ownable, IShakeOnIt {
         UserStorage acceptor = UserStorage(acceptorStorageAddress);
 
         // update the state of the bet
-        betDetails.accepted = true;
         betDetails.acceptor = acceptorStorageAddress;
         betDetails.status = BetStatus.FUNDED;
         // save the bet for the acceptor
@@ -103,6 +102,13 @@ contract BetManagement is Ownable, IShakeOnIt {
         );
     }
 
+    /**
+     * @notice Declares the winner of the bet.
+     * @param _betContract The address of the bet contract
+     * @param _arbiter The address of the arbiter
+     * @param _winner The address of the winner
+     * @param _loser The address of the loser
+     */
     function declareWinner(
         address _betContract,
         address _arbiter,
@@ -150,8 +156,16 @@ contract BetManagement is Ownable, IShakeOnIt {
         emit BetCancelled(msg.sender, _initiator);
     }
 
+    /**
+     * @notice Reports the fees collected by the platform.
+     * @param _fees The fees collected by the platform.
+     */
     function reportFeesCollected(uint256 _fees) external onlyBet {
         feesCollected += _fees;
+    }
+
+    function getFeeCollected() external view returns (uint256) {
+        return feesCollected;
     }
 
     function getBets() external view returns (address[] memory) {

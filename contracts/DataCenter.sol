@@ -7,13 +7,17 @@ import "./Arbiter.sol";
 import "./BetManagement.sol";
 import "./UserManagement.sol";
 import "./ArbiterManagement.sol";
-import "./interfaces/IShakeOnIt.sol";
 
-contract DataCenter is IShakeOnIt, Ownable {
+contract DataCenter is Ownable {
     address private multiSigWallet;
     UserManagement private userManagement;
     ArbiterManagement private arbiterManagement;
     BetManagement private betManagement;
+
+    event MultiSigChanged(
+        address indexed oldMultiSig,
+        address indexed newMultiSig
+    );
 
     constructor(
         address _factory,
@@ -52,5 +56,13 @@ contract DataCenter is IShakeOnIt, Ownable {
 
     function getArbiterManagement() external view returns (address) {
         return address(arbiterManagement);
+    }
+
+    function isArbiter(address _arbiter) external view returns (bool) {
+        return arbiterManagement.isArbiter(_arbiter);
+    }
+
+    function isUser(address _user) external view returns (bool) {
+        return userManagement.isUser(_user);
     }
 }

@@ -4,9 +4,8 @@ pragma solidity ^0.8.0;
 import "./interfaces/IShakeOnIt.sol";
 import "./BetManagement.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
-contract Bet is IShakeOnIt, Initializable {
+contract Bet is IShakeOnIt {
     address private initiator;
     address private acceptor;
     address private arbiter;
@@ -32,11 +31,7 @@ contract Bet is IShakeOnIt, Initializable {
         _;
     }
 
-    constructor() {
-        _disableInitializers();
-    }
-
-    function initialize(
+    constructor(
         address _betManagement,
         address _fundToken,
         address _initiator,
@@ -46,7 +41,7 @@ contract Bet is IShakeOnIt, Initializable {
         uint256 _platformFee,
         uint256 _deadline,
         string memory _condition
-    ) external initializer {
+    ) {
         betManagement = BetManagement(_betManagement);
         fundToken = IERC20(_fundToken);
         initiator = _initiator;
@@ -58,6 +53,23 @@ contract Bet is IShakeOnIt, Initializable {
         deadline = _deadline;
         condition = _condition;
         status = BetStatus.INITIATED;
+
+        // create bet details
+        BetDetails memory betDetails = BetDetails({
+            betContract: address(this),
+            initiator: initiator,
+            acceptor: address(0),
+            arbiter: _arbiter,
+            winner: address(0),
+            loser: address(0),
+            fundToken: _fundToken,
+            amount: _amount,
+            deadline: _deadline,
+            status: BetStatus.INITIATED
+        });
+
+        // store the bet details in the bet management contract
+        betManagement.createBet(betDetails);
     }
     /**
      * @notice Accepts the bet and funds the escrow.
@@ -115,12 +127,11 @@ contract Bet is IShakeOnIt, Initializable {
      * @notice Declares the winner of the bet and pays the arbiter.
      * @dev This function can only be called by the arbiter.
      * @param _winner The address of the participant who is declared the winner.
-     * @return _arbiterFee amount paid to the arbiter.
      */
     function declareWinner(
         address _winner,
         address _loser
-    ) external onlyArbiter returns (uint256 _arbiterFee) {
+    ) external onlyArbiter {
         require(_winner == initiator || _winner == acceptor, "Invalid winner"); // ensure the winner is a participant
         require(status == BetStatus.FUNDED, "Bet has not been funded yet"); // ensure the bet is funded
         require(block.timestamp >= deadline, "Deadline has not passed yet"); // ensure the deadline has passed
@@ -137,19 +148,6 @@ contract Bet is IShakeOnIt, Initializable {
         balances[msg.sender] = 0;
         // report the winner to the bet management contract
         betManagement.declareWinner(address(this), arbiter, _winner, _loser);
-
-        // emit BetWon event
-        emit BetWon(address(this), winner, arbiter, address(fundToken), amount);
-        // return the arbiter fee
-        _arbiterFee = arbiterFee;
-    }
-
-    function withdrawEarnings() external onlyWinner {
-        require(status == BetStatus.WON, "Bet has not been declared won yet");
-        // get the user storage address
-        address userStorageAddress = betManagement.getUserStorage(msg.sender);
-        require(userStorageAddress == winner, "Restricted to winner");
-        require(balances[userStorageAddress] > 0, "No funds to withdraw");
         // get the multisig wallet address for the platform fee
         address multiSigWallet = betManagement.getMultiSig();
         // transfer the platform fee to the multisig wallet
@@ -159,6 +157,14 @@ contract Bet is IShakeOnIt, Initializable {
         );
         // report the fees to the bet management contract
         betManagement.reportFeesCollected(platformFee);
+    }
+
+    function withdrawEarnings() external onlyWinner {
+        require(status == BetStatus.WON, "Bet has not been declared won yet");
+        // get the user storage address
+        address userStorageAddress = betManagement.getUserStorage(msg.sender);
+        require(userStorageAddress == winner, "Restricted to winner");
+        require(balances[userStorageAddress] > 0, "No funds to withdraw");
         // transfer the funds to the winner
         require(
             fundToken.transfer(userStorageAddress, payout),
