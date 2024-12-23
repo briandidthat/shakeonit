@@ -69,4 +69,8 @@ interface IShakeOnIt {
     event UserAdded(address indexed user, address indexed userStorage);
     event BetCancelled(address indexed betAddress, address indexed initiator);
     event ArbiterBlocked(address indexed arbiter, string reason);
+    event MultiSigChanged(
+        address indexed oldMultiSig,
+        address indexed newMultiSig
+    );
 }
