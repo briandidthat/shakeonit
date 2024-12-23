@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import "./Bet.sol";
 import "./interfaces/IShakeOnIt.sol";
+import "./BetManagement.sol";
 import "./DataCenter.sol";
 import "@openzeppelin/contracts/proxy/Clones.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -10,19 +11,17 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract BetFactory is Ownable, IShakeOnIt {
     address private implementation;
-    address private multiSigWallet;
     uint256 private platformPercentage;
     uint256 private instances;
     DataCenter private dataCenter;
 
     constructor(
-        address _multiSig,
+        address _dataCenter,
         uint256 _platformPercentage
     ) Ownable(msg.sender) {
         implementation = address(new Bet());
-        multiSigWallet = _multiSig;
+        dataCenter = DataCenter(_dataCenter);
         platformPercentage = _platformPercentage;
-        dataCenter = new DataCenter(address(this));
     }
 
     /**
@@ -59,9 +58,8 @@ contract BetFactory is Ownable, IShakeOnIt {
         address bet = Clones.clone(implementation);
         // Initialize the bet clone
         Bet(bet).initialize(
-            multiSigWallet,
             address(dataCenter),
-            msg.sender,
+            userStorageAddress,
             _arbiter,
             _fundToken,
             _amount,
@@ -77,7 +75,7 @@ contract BetFactory is Ownable, IShakeOnIt {
         // create bet details
         BetDetails memory betDetails = BetDetails({
             betContract: bet,
-            initiator: msg.sender,
+            initiator: userStorageAddress,
             acceptor: address(0),
             arbiter: _arbiter,
             winner: address(0),
@@ -91,15 +89,10 @@ contract BetFactory is Ownable, IShakeOnIt {
         });
 
         // store the bet details in the data center
-        dataCenter.createBet(betDetails);
+        address betManagement = dataCenter.getBetManagement();
+        BetManagement(betManagement).createBet(betDetails);
         // return the address of the bet
         return bet;
-    }
-
-    function register() external returns (address) {
-        // add a new user in the data center
-        address userStorage = dataCenter.addUser(msg.sender);
-        return userStorage;
     }
 
     function getImplementation() external view returns (address) {

@@ -2,12 +2,11 @@
 pragma solidity ^0.8.0;
 
 import "./interfaces/IShakeOnIt.sol";
-import "./DataCenter.sol";
+import "./BetManagement.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 contract Bet is IShakeOnIt, Initializable {
-    address private multiSigWallet;
     address private initiator;
     address private acceptor;
     address private arbiter;
@@ -18,7 +17,7 @@ contract Bet is IShakeOnIt, Initializable {
     uint256 private platformFee;
     uint256 private deadline;
     string private condition;
-    DataCenter private dataCenter;
+    BetManagement private betManagement;
     IERC20 private fundToken;
     BetStatus private status;
     mapping(address => uint256) private balances;
@@ -28,11 +27,8 @@ contract Bet is IShakeOnIt, Initializable {
         _;
     }
 
-    modifier onlyParties() {
-        require(
-            msg.sender == initiator || msg.sender == acceptor,
-            "Restricted to bet participants"
-        );
+    modifier onlyWinner() {
+        require(msg.sender == winner, "Restricted to winner");
         _;
     }
 
@@ -41,8 +37,7 @@ contract Bet is IShakeOnIt, Initializable {
     }
 
     function initialize(
-        address _multiSigWallet,
-        address _dataCenter,
+        address _betManagement,
         address _fundToken,
         address _initiator,
         address _arbiter,
@@ -52,15 +47,7 @@ contract Bet is IShakeOnIt, Initializable {
         uint256 _deadline,
         string memory _condition
     ) external initializer {
-        require(
-            fundToken.transferFrom(_initiator, address(this), _amount),
-            "Token transfer failed"
-        );
-        // update the balance of the initiator upon successful transfer
-        balances[_initiator] = _amount;
-
-        multiSigWallet = _multiSigWallet;
-        dataCenter = DataCenter(_dataCenter);
+        betManagement = BetManagement(_betManagement);
         fundToken = IERC20(_fundToken);
         initiator = _initiator;
         arbiter = _arbiter;
@@ -72,42 +59,32 @@ contract Bet is IShakeOnIt, Initializable {
         condition = _condition;
         status = BetStatus.INITIATED;
     }
-
     /**
      * @notice Accepts the bet and funds the escrow.
      */
-    function acceptBet() external returns (BetDetails memory) {
+    function acceptBet() external {
         require(
             status == BetStatus.INITIATED,
             "Bet must be in initiated status"
         );
+        // get the user storage address and perform the token transfer
+        address userStorageAddress = betManagement.getUserStorage(msg.sender);
+        require(userStorageAddress != address(0), "User has not registered");
         require(
-            balances[msg.sender] == 0,
+            balances[userStorageAddress] == 0,
             "Participant has already funded the escrow"
         );
-        // get the user storage address and perform the token transfer
-        address userStorageAddress = dataCenter.getUserStorage(msg.sender);
-        require(userStorageAddress != address(0), "User has not registered");
         require(
             fundToken.transferFrom(userStorageAddress, address(this), amount),
             "Token transfer failed"
         );
 
-        // update the balance of the acceptor
+        // update the balance of the acceptor and contract state
         acceptor = userStorageAddress;
         balances[userStorageAddress] = amount;
         status = BetStatus.FUNDED;
-
-        // get the bet details from the user storage
-        BetDetails memory betDetails = UserStorage(initiator).getBetDetails(
-            address(this)
-        );
-        // update the state
-        betDetails.accepted = true;
-        betDetails.acceptor = userStorageAddress;
-        // send updated bet details to the data center
-        dataCenter.acceptBet(betDetails);
-        return betDetails;
+        // report the acceptance to the bet management contract
+        betManagement.acceptBet(msg.sender);
     }
 
     /**
@@ -115,9 +92,8 @@ contract Bet is IShakeOnIt, Initializable {
      * @dev This function can only be called by the initiator.
      */
     function cancelBet() external {
-        address userStorageAddress = dataCenter.getUserStorage(msg.sender);
+        address userStorageAddress = betManagement.getUserStorage(msg.sender);
         require(userStorageAddress == initiator, "Restricted to initiator");
-
         require(
             status == BetStatus.INITIATED,
             "Bet must be in initiated status"
@@ -132,7 +108,7 @@ contract Bet is IShakeOnIt, Initializable {
         balances[initiator] = 0;
         status = BetStatus.CANCELLED;
         // report the cancellation to the data center
-        dataCenter.cancelBet(address(this), initiator);
+        betManagement.cancelBet(initiator);
     }
 
     /**
@@ -159,23 +135,8 @@ contract Bet is IShakeOnIt, Initializable {
         );
         // update the balance of the arbiter
         balances[msg.sender] = 0;
-
-        // get the bet details from userStorage
-        BetDetails memory betDetails = UserStorage(_winner).getBetDetails(
-            address(this)
-        );
-        // update the bet details
-        betDetails.winner = _winner;
-        betDetails.loser = _loser;
-        // update the status
-        betDetails.status = BetStatus.WON;
-        // send updated bet details to the data center
-        dataCenter.declareWinner(
-            betDetails.betContract,
-            betDetails.arbiter,
-            _winner,
-            _loser
-        );
+        // report the winner to the bet management contract
+        betManagement.declareWinner(address(this), arbiter, _winner, _loser);
 
         // emit BetWon event
         emit BetWon(address(this), winner, arbiter, address(fundToken), amount);
@@ -183,18 +144,21 @@ contract Bet is IShakeOnIt, Initializable {
         _arbiterFee = arbiterFee;
     }
 
-    function withdrawEarnings() external onlyParties {
-        address userStorageAddress = dataCenter.getUserStorage(msg.sender);
+    function withdrawEarnings() external onlyWinner {
+        require(status == BetStatus.WON, "Bet has not been declared won yet");
+        // get the user storage address
+        address userStorageAddress = betManagement.getUserStorage(msg.sender);
         require(userStorageAddress == winner, "Restricted to winner");
         require(balances[userStorageAddress] > 0, "No funds to withdraw");
-        require(status == BetStatus.WON, "Bet has not been declared won yet");
-
+        // get the multisig wallet address for the platform fee
+        address multiSigWallet = betManagement.getMultiSig();
         // transfer the platform fee to the multisig wallet
         require(
             fundToken.transfer(multiSigWallet, platformFee),
             "Token transfer failed"
         );
-
+        // report the fees to the bet management contract
+        betManagement.reportFeesCollected(platformFee);
         // transfer the funds to the winner
         require(
             fundToken.transfer(userStorageAddress, payout),
@@ -204,14 +168,6 @@ contract Bet is IShakeOnIt, Initializable {
         balances[userStorageAddress] = 0;
         // update the status of the bet
         status = BetStatus.SETTLED;
-
-        emit BetSettled(
-            address(this),
-            userStorageAddress,
-            arbiter,
-            address(fundToken),
-            amount
-        );
     }
 
     function getArbiter() external view returns (address) {

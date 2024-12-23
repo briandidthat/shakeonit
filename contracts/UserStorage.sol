@@ -58,8 +58,7 @@ contract UserStorage is IShakeOnIt, Ownable {
     function saveBet(BetDetails memory _betDetails) external onlyDataCenter {
         // set bet status to initiated
         _betDetails.status = BetStatus.INITIATED;
-
-        // Store the proposal
+        // store the bet details
         betDetailsRegistry[_betDetails.betContract] = _betDetails;
         bets.push(_betDetails.betContract);
         betCount++;
@@ -97,6 +96,25 @@ contract UserStorage is IShakeOnIt, Ownable {
         delete betDetailsRegistry[_betContract];
         // decrement the bet count
         betCount--;
+    }
+
+    /**
+     * @dev Fund a bet
+     * @param _betContract address of the bet contract
+     * @param _amount amount to fund
+     */
+    function fundBet(address _betContract, uint256 _amount) external onlyOwner {
+        BetDetails memory betDetails = betDetailsRegistry[_betContract];
+        require(betDetails.betContract == _betContract, "Invalid bet contract");
+        require(
+            IERC20(betDetails.fundToken).transferFrom(
+                address(this),
+                _betContract,
+                _amount
+            ),
+            "Transfer failed"
+        );
+        balances[betDetails.fundToken] -= _amount;
     }
 
     /**
