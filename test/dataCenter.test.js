@@ -15,10 +15,8 @@ describe("DataCenter", function () {
   });
 
   it("Should set a new multi-sig wallet", async function () {
-    let tx = await dataCenter
-      .connect(multiSig)
-      .setNewMultiSig(newMultiSig.address);
-    await tx.wait();
+    await dataCenter.connect(multiSig).setNewMultiSig(newMultiSig.address);
+    // Check if the new multi-sig wallet is set to the new multi-sig wallet address
     expect(await dataCenter.getMultiSig()).to.equal(newMultiSig.address);
   });
 
