@@ -19,6 +19,7 @@ interface IShakeOnIt {
         address loser;
         address fundToken;
         uint256 amount;
+        uint256 payout;
         uint256 deadline;
         BetStatus status;
     }

@@ -10,6 +10,7 @@ contract Bet is IShakeOnIt {
     address private acceptor;
     address private arbiter;
     address private winner;
+    address private loser;
     uint256 private amount;
     uint256 private payout;
     uint256 private arbiterFee;
@@ -39,6 +40,7 @@ contract Bet is IShakeOnIt {
         uint256 _amount,
         uint256 _arbiterFee,
         uint256 _platformFee,
+        uint256 _payout,
         uint256 _deadline,
         string memory _condition
     ) {
@@ -49,28 +51,16 @@ contract Bet is IShakeOnIt {
         amount = _amount;
         arbiterFee = _arbiterFee;
         platformFee = _platformFee;
-        payout = amount - (arbiterFee + platformFee);
+        payout = _payout;
         deadline = _deadline;
         condition = _condition;
         status = BetStatus.INITIATED;
-
-        // create bet details
-        BetDetails memory betDetails = BetDetails({
-            betContract: address(this),
-            initiator: initiator,
-            acceptor: address(0),
-            arbiter: _arbiter,
-            winner: address(0),
-            loser: address(0),
-            fundToken: _fundToken,
-            amount: _amount,
-            deadline: _deadline,
-            status: BetStatus.INITIATED
-        });
-
-        // store the bet details in the bet management contract
-        betManagement.createBet(betDetails);
+        // temp values
+        acceptor = address(0);
+        winner = address(0);
+        loser = address(0);
     }
+
     /**
      * @notice Accepts the bet and funds the escrow.
      */
@@ -133,11 +123,13 @@ contract Bet is IShakeOnIt {
         address _loser
     ) external onlyArbiter {
         require(_winner == initiator || _winner == acceptor, "Invalid winner"); // ensure the winner is a participant
+        require(_loser == initiator || _loser == acceptor, "Invalid winner"); // ensure the loser is a participant
         require(status == BetStatus.FUNDED, "Bet has not been funded yet"); // ensure the bet is funded
         require(block.timestamp >= deadline, "Deadline has not passed yet"); // ensure the deadline has passed
 
-        // update the winner
+        // update the winner and loser
         winner = _winner;
+        loser = _loser;
         // update the status of the bet
         status = BetStatus.WON;
         require(
@@ -146,8 +138,6 @@ contract Bet is IShakeOnIt {
         );
         // update the balance of the arbiter
         balances[msg.sender] = 0;
-        // report the winner to the bet management contract
-        betManagement.declareWinner(address(this), arbiter, _winner, _loser);
         // get the multisig wallet address for the platform fee
         address multiSigWallet = betManagement.getMultiSig();
         // transfer the platform fee to the multisig wallet
@@ -155,8 +145,14 @@ contract Bet is IShakeOnIt {
             fundToken.transfer(multiSigWallet, platformFee),
             "Token transfer failed"
         );
-        // report the fees to the bet management contract
-        betManagement.reportFeesCollected(platformFee);
+        // report the winner to the bet management contract
+        betManagement.declareWinner(
+            address(this),
+            arbiter,
+            _winner,
+            _loser,
+            platformFee
+        );
     }
 
     function withdrawEarnings() external onlyWinner {
@@ -180,6 +176,22 @@ contract Bet is IShakeOnIt {
         return arbiter;
     }
 
+    function getInitiator() external view returns (address) {
+        return initiator;
+    }
+
+    function getAcceptor() external view returns (address) {
+        return acceptor;
+    }
+
+    function getWinner() external view returns (address) {
+        return winner;
+    }
+
+    function getLoser() external view returns (address) {
+        return loser;
+    }
+
     function getAmount() external view returns (uint256) {
         return amount;
     }
@@ -198,5 +210,9 @@ contract Bet is IShakeOnIt {
 
     function getPlatformFee() external view returns (uint256) {
         return platformFee;
+    }
+
+    function getCondition() external view returns (string memory) {
+        return condition;
     }
 }

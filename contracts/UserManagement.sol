@@ -36,6 +36,7 @@ contract UserManagement is Ownable {
      * @param _user The address of the user
      */
     function getUserStorage(address _user) external view returns (address) {
+        require(isUser[_user], "User not registered");
         return userStorageRegistry[_user];
     }
 

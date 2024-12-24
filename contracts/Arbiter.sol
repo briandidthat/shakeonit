@@ -5,6 +5,7 @@ import "./interfaces/IShakeOnIt.sol";
 import "./DataCenter.sol";
 import "./Bet.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract Arbiter is IShakeOnIt, Ownable {
     enum ArbiterStatus {
@@ -18,8 +19,8 @@ contract Arbiter is IShakeOnIt, Ownable {
     ArbiterStatus private status;
     address[] private bets;
     mapping(address => uint256) private balances;
-    mapping(address => bool) public betWasDeclared;
-    mapping(address => bool) public betIsActive;
+    mapping(address => bool) private betWasDeclared;
+    mapping(address => bool) private betIsActive;
 
     constructor(address _owner, address _dataCenter) Ownable(_owner) {
         dataCenter = _dataCenter;

@@ -10,6 +10,7 @@ import "./ArbiterManagement.sol";
 
 contract DataCenter is Ownable {
     address private multiSigWallet;
+    address private betFactory;
     UserManagement private userManagement;
     ArbiterManagement private arbiterManagement;
     BetManagement private betManagement;
@@ -23,10 +24,14 @@ contract DataCenter is Ownable {
         address _factory,
         address _multiSigWallet
     ) Ownable(_multiSigWallet) {
+        betFactory = _factory;
         multiSigWallet = _multiSigWallet;
+        // create the user management contract
         userManagement = new UserManagement(multiSigWallet);
+        // create the arbiter management contract
         arbiterManagement = new ArbiterManagement(_multiSigWallet);
-        betManagement = new BetManagement(_multiSigWallet, _factory);
+        // create the bet management contract
+        betManagement = new BetManagement(_multiSigWallet, address(this));
     }
 
     function setNewMultiSig(address _newMultiSig) external onlyOwner {
@@ -42,20 +47,28 @@ contract DataCenter is Ownable {
         return multiSigWallet;
     }
 
-    function getBetManagement() external view returns (address) {
-        return address(betManagement);
+    function getUserManagement() external view returns (UserManagement) {
+        return userManagement;
     }
 
-    function getUserManagement() external view returns (address) {
-        return address(userManagement);
+    function getArbiterManagement() external view returns (ArbiterManagement) {
+        return arbiterManagement;
+    }
+
+    function getBetManagement() external view returns (BetManagement) {
+        return betManagement;
+    }
+
+    function getBetFactory() external view returns (address) {
+        return betFactory;
     }
 
     function getUserStorage(address _user) external view returns (address) {
         return userManagement.getUserStorage(_user);
     }
 
-    function getArbiterManagement() external view returns (address) {
-        return address(arbiterManagement);
+    function getArbiter(address _arbiter) external view returns (address) {
+        return arbiterManagement.getArbiter(_arbiter);
     }
 
     function isArbiter(address _arbiter) external view returns (bool) {
