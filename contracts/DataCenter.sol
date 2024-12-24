@@ -21,11 +21,11 @@ contract DataCenter is Ownable {
     );
 
     constructor(
-        address _factory,
-        address _multiSigWallet
+        address _multiSigWallet,
+        address _factory
     ) Ownable(_multiSigWallet) {
-        betFactory = _factory;
         multiSigWallet = _multiSigWallet;
+        betFactory = _factory;
         // create the user management contract
         userManagement = new UserManagement(multiSigWallet);
         // create the arbiter management contract
@@ -39,6 +39,8 @@ contract DataCenter is Ownable {
         require(_newMultiSig != owner(), "Owner cannot be the new multi-sig");
         // transfer ownership to the new multi-sig
         _transferOwnership(_newMultiSig);
+        // update the multi-sig address
+        multiSigWallet = _newMultiSig;
         // emit MultiSigChanged event
         emit MultiSigChanged(_newMultiSig, multiSigWallet);
     }
