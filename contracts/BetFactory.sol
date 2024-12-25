@@ -79,7 +79,8 @@ contract BetFactory is Ownable, IShakeOnIt {
         });
 
         // get the BetManagement contract
-        BetManagement betManagement = dataCenter.getBetManagement();
+        address betManagementAddress = dataCenter.getBetManagement();
+        BetManagement betManagement = BetManagement(betManagementAddress);
         // store the bet details in the bet management contract
         betManagement.createBet(betDetails);
         // increment the number of instances

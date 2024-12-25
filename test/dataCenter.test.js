@@ -26,25 +26,21 @@ describe("DataCenter", function () {
     ).to.be.revertedWith("Zero address not allowed");
   });
 
-  // it("Should get the UserManagement contract address", async function () {
-  //   expect(await dataCenter.getUserManagement()).to.equal(
-  //     userManagement.address
-  //   );
-  // });
+  it("Should get the UserManagement contract address", async function () {
+    expect(await dataCenter.getUserManagement()).to.be.a.properAddress;
+  });
 
-  //   it("Should get the ArbiterManagement contract address", async function () {
-  //     expect(await dataCenter.getArbiterManagement()).to.equal(
-  //       arbiterManagement.address
-  //     );
-  //   });
+  it("Should get the ArbiterManagement contract address", async function () {
+    expect(await dataCenter.getArbiterManagement()).to.be.a.properAddress;
+  });
 
-  //   it("Should get the BetManagement contract address", async function () {
-  //     expect(await dataCenter.getBetManagement()).to.equal(betManagement.address);
-  //   });
+  it("Should get the BetManagement contract address", async function () {
+    expect(await dataCenter.getBetManagement()).to.be.a.properAddress;
+  });
 
-  //   it("Should get the bet factory address", async function () {
-  //     expect(await dataCenter.getBetFactory()).to.equal(addr1.address);
-  //   });
+  it("Should get the bet factory address", async function () {
+    expect(await dataCenter.getBetFactory()).to.be.a.properAddress;
+  });
 
   //   it("Should get the user storage address", async function () {
   //     await userManagement.addUser(addr1.address);

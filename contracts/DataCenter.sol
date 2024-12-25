@@ -49,16 +49,16 @@ contract DataCenter is Ownable {
         return multiSigWallet;
     }
 
-    function getUserManagement() external view returns (UserManagement) {
-        return userManagement;
+    function getUserManagement() external view returns (address) {
+        return address(userManagement);
     }
 
-    function getArbiterManagement() external view returns (ArbiterManagement) {
-        return arbiterManagement;
+    function getArbiterManagement() external view returns (address) {
+        return address(arbiterManagement);
     }
 
-    function getBetManagement() external view returns (BetManagement) {
-        return betManagement;
+    function getBetManagement() external view returns (address) {
+        return address(betManagement);
     }
 
     function getBetFactory() external view returns (address) {
