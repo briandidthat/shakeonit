@@ -27,9 +27,12 @@ contract DataCenter is Ownable {
         multiSigWallet = _multiSigWallet;
         betFactory = _factory;
         // create the user management contract
-        userManagement = new UserManagement(multiSigWallet);
+        userManagement = new UserManagement(multiSigWallet, address(this));
         // create the arbiter management contract
-        arbiterManagement = new ArbiterManagement(_multiSigWallet);
+        arbiterManagement = new ArbiterManagement(
+            _multiSigWallet,
+            address(this)
+        );
         // create the bet management contract
         betManagement = new BetManagement(_multiSigWallet, address(this));
     }
@@ -74,10 +77,26 @@ contract DataCenter is Ownable {
     }
 
     function isArbiter(address _arbiter) external view returns (bool) {
-        return arbiterManagement.isArbiter(_arbiter);
+        return arbiterManagement.isRegistered(_arbiter);
     }
 
     function isUser(address _user) external view returns (bool) {
         return userManagement.isUser(_user);
+    }
+
+    /**
+     * @dev Register a new user
+     * @param _user The address of the user
+     */
+    function registerUser(address _user) external {
+        userManagement.addUser(_user);
+    }
+
+    /**
+     * @dev Register a new arbiter
+     * @param _arbiter The address of the arbiter
+     */
+    function registerArbiter(address _arbiter) external onlyOwner {
+        arbiterManagement.addArbiter(_arbiter);
     }
 }
