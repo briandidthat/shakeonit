@@ -33,18 +33,20 @@ contract ArbiterManagement is Ownable {
      * @dev Add an arbiter
      * @param _arbiter The address of the arbiter to be added
      */
-    function addArbiter(address _arbiter) external onlyDataCenter {
+    function addArbiter(address _arbiter) external onlyDataCenter returns (address) {
         require(_arbiter != address(0), "Zero address not allowed");
         require(!isArbiter[_arbiter], "Arbiter already added");
         // set the arbiter to true in the isArbiter mapping
         isArbiter[_arbiter] = true;
         // create a new arbiter contract
-        Arbiter arbiterContract = new Arbiter(_arbiter, address(this));
+        Arbiter arbiterContract = new Arbiter(_arbiter, address(this)); 
         // add the arbiter to the arbiters array
         arbiters.push(address(arbiterContract));
         // add the arbiter to the arbiterRegistry mapping
         arbiterRegistry[_arbiter] = address(arbiterContract);
         emit ArbiterAdded(_arbiter);
+        // return the address of the arbiter contract
+        return address(arbiterContract);
     }
 
     /**

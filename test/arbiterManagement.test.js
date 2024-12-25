@@ -1,8 +1,5 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const {
-  abi,
-} = require("../artifacts/contracts/ArbiterManagement.sol/ArbiterManagement.json");
 
 describe("ArbiterManagement", function () {
   let arbiterManagement;
@@ -43,11 +40,17 @@ describe("ArbiterManagement", function () {
     // Add arbiters
     await arbiterManagement.connect(dataCenter).addArbiter(addr1.address);
     await arbiterManagement.connect(dataCenter).addArbiter(addr2.address);
+    // get the arbiter addresses for comparison
+    const arbiter1Address = await arbiterManagement.getArbiter(addr1.address);
+    const arbiter2Address = await arbiterManagement.getArbiter(addr2.address);
+
     // Get the list of arbiters
     const arbiters = await arbiterManagement.getArbiters();
+    console.log(arbiters);
 
-    expect(arbiters).to.include(addr1.address);
-    expect(arbiters).to.include(addr2.address);
+    expect(arbiters).to.have.lengthOf(2);
+    expect(arbiters).to.include(arbiter1Address);
+    expect(arbiters).to.include(arbiter2Address);
   });
 
   it("Should get the list of blocked arbiters", async function () {
@@ -99,7 +102,7 @@ describe("ArbiterManagement", function () {
     expect(arbiterStatus).to.equal(3); // 3 is the status for BLOCKED
   });
 
-  it("Should penalize an arbiter", async function () {
+  it("Should penalize an arbiter for misconduct", async function () {
     await arbiterManagement.connect(dataCenter).addArbiter(addr1.address);
     const arbiterContract = await arbiterManagement.getArbiter(addr1.address);
     const Arbiter = await ethers.getContractFactory("Arbiter");
