@@ -55,9 +55,11 @@ contract ArbiterManagement is Ownable {
     function suspendArbiter(
         address _arbiter,
         string calldata reason
-    ) external onlyDataCenter {
+    ) external onlyOwner {
         require(isArbiter[_arbiter], "Not an arbiter");
-        Arbiter arbiter = Arbiter(_arbiter);
+        // create pointer to the arbiter contract and set to suspended
+        address arbiterContract = arbiterRegistry[_arbiter];
+        Arbiter arbiter = Arbiter(arbiterContract);
         arbiter.setArbiterStatus(Arbiter.ArbiterStatus.SUSPENDED);
         // emit ArbiterSuspended event
         emit ArbiterSuspended(_arbiter, reason);
@@ -71,10 +73,11 @@ contract ArbiterManagement is Ownable {
     function blockArbiter(
         address _arbiter,
         string calldata _reason
-    ) external onlyDataCenter {
+    ) external onlyOwner {
         require(isArbiter[_arbiter], "Not an arbiter");
         // create pointer to the arbiter contract and set to blocked
-        Arbiter arbiter = Arbiter(_arbiter);
+        address arbiterContract = arbiterRegistry[_arbiter];
+        Arbiter arbiter = Arbiter(arbiterContract);
         arbiter.setArbiterStatus(Arbiter.ArbiterStatus.BLOCKED);
         // add the arbiter to the blockedArbiters array
         blockedArbiters.push(_arbiter);
@@ -112,6 +115,14 @@ contract ArbiterManagement is Ownable {
     function getArbiter(address _arbiter) external view returns (address) {
         require(isArbiter[_arbiter], "Not an arbiter");
         return arbiterRegistry[_arbiter];
+    }
+
+    function getArbiterStatus(address _arbiter) external view returns (Arbiter.ArbiterStatus) {
+        require(isArbiter[_arbiter], "Not an arbiter");
+
+        address arbiterContract = arbiterRegistry[_arbiter];
+        Arbiter arbiter = Arbiter(arbiterContract);
+        return arbiter.getStatus();
     }
 
     function getArbiterCouint() external view returns (uint256) {
