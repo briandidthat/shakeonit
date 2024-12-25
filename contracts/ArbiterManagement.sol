@@ -5,10 +5,11 @@ import "./Arbiter.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract ArbiterManagement is Ownable {
-    address[] public arbiters;
-    address[] public blockedArbiters;
-    mapping(address => bool) public isArbiter;
-    mapping(address => address) public arbiterRegistry;
+    address public dataCenter;
+    address[] private arbiters;
+    address[] private blockedArbiters;
+    mapping(address => bool) private isArbiter;
+    mapping(address => address) private arbiterRegistry;
 
     event ArbiterAdded(address indexed arbiter);
     event ArbiterPenalized(
@@ -19,17 +20,30 @@ contract ArbiterManagement is Ownable {
     event ArbiterSuspended(address indexed arbiter, string reason);
     event ArbiterBlocked(address indexed arbiter, string reason);
 
-    constructor(address _multiSig) Ownable(_multiSig) {}
+    modifier onlyDataCenter() {
+        require(msg.sender == dataCenter, "Restricted to data center");
+        _;
+    }
+
+    constructor(address _multiSig, address _dataCenter) Ownable(_multiSig) {
+        dataCenter = _dataCenter;
+    }
 
     /**
      * @dev Add an arbiter
      * @param _arbiter The address of the arbiter to be added
      */
-    function addArbiter(address _arbiter) external onlyOwner {
+    function addArbiter(address _arbiter) external onlyDataCenter {
         require(_arbiter != address(0), "Zero address not allowed");
         require(!isArbiter[_arbiter], "Arbiter already added");
-        arbiters.push(_arbiter);
+        // set the arbiter to true in the isArbiter mapping
         isArbiter[_arbiter] = true;
+        // create a new arbiter contract
+        Arbiter arbiterContract = new Arbiter(_arbiter, address(this));
+        // add the arbiter to the arbiters array
+        arbiters.push(address(arbiterContract));
+        // add the arbiter to the arbiterRegistry mapping
+        arbiterRegistry[_arbiter] = address(arbiterContract);
         emit ArbiterAdded(_arbiter);
     }
 
@@ -38,7 +52,10 @@ contract ArbiterManagement is Ownable {
      * @param _arbiter The address of the arbiter to be suspended
      * @param reason The reason for suspending the arbiter
      */
-    function suspendArbiter(address _arbiter, string calldata reason) external onlyOwner {
+    function suspendArbiter(
+        address _arbiter,
+        string calldata reason
+    ) external onlyDataCenter {
         require(isArbiter[_arbiter], "Not an arbiter");
         Arbiter arbiter = Arbiter(_arbiter);
         arbiter.setArbiterStatus(Arbiter.ArbiterStatus.SUSPENDED);
@@ -54,7 +71,7 @@ contract ArbiterManagement is Ownable {
     function blockArbiter(
         address _arbiter,
         string calldata _reason
-    ) external onlyOwner {
+    ) external onlyDataCenter {
         require(isArbiter[_arbiter], "Not an arbiter");
         // create pointer to the arbiter contract and set to blocked
         Arbiter arbiter = Arbiter(_arbiter);
@@ -93,6 +110,7 @@ contract ArbiterManagement is Ownable {
     }
 
     function getArbiter(address _arbiter) external view returns (address) {
+        require(isArbiter[_arbiter], "Not an arbiter");
         return arbiterRegistry[_arbiter];
     }
 
@@ -102,5 +120,9 @@ contract ArbiterManagement is Ownable {
 
     function getMultiSig() external view returns (address) {
         return owner();
+    }
+
+    function isRegistered(address _arbiter) external view returns (bool) {
+        return isArbiter[_arbiter];
     }
 }
