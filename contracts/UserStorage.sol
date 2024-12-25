@@ -7,22 +7,21 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract UserStorage is IShakeOnIt, Ownable {
-    address private dataCenter;
-    uint256 private betCount;
+    address private userManagement;
     uint256 private victories;
     uint256 private losses;
+    uint256 private pnl;
     address[] private bets;
     mapping(address => BetDetails) public betDetailsRegistry;
-    mapping(address => address) public betContracts;
     mapping(address => uint256) public balances;
 
-    modifier onlyDataCenter() {
-        require(msg.sender == dataCenter, "Restricted to DataCenter");
+    modifier onlyUserManagement() {
+        require(msg.sender == userManagement, "Restricted to userManagement");
         _;
     }
 
-    constructor(address _owner, address _dataCenter) Ownable(_owner) {
-        dataCenter = _dataCenter;
+    constructor(address _owner, address _userManagement) Ownable(_owner) {
+        userManagement = _userManagement;
     }
 
     /**
@@ -36,7 +35,7 @@ contract UserStorage is IShakeOnIt, Ownable {
             token.transferFrom(msg.sender, address(this), _amount),
             "Transfer failed"
         );
-        balances[_token] = _amount;
+        balances[_token] += _amount;
     }
 
     /**
@@ -55,26 +54,44 @@ contract UserStorage is IShakeOnIt, Ownable {
      * @dev store a bet contract
      * @param _betDetails BetDetails struct
      */
-    function saveBet(BetDetails memory _betDetails) external onlyDataCenter {
-        // set bet status to initiated
-        _betDetails.status = BetStatus.INITIATED;
+    function saveBet(
+        BetDetails memory _betDetails
+    ) external onlyUserManagement {
+        BetDetails storage bet = betDetailsRegistry[_betDetails.betContract];
+        // if bet is not already stored, add it to the list
+        if (bet.betContract == address(0)) {
+            bets.push(_betDetails.betContract);
+        }
         // store the bet details
         betDetailsRegistry[_betDetails.betContract] = _betDetails;
-        bets.push(_betDetails.betContract);
-        betCount++;
     }
 
     /**
-     * @dev Update the bet status
+     * @dev Record a victory
      * @param _betDetails BetDetails struct
      */
-    function updateBet(BetDetails memory _betDetails) external onlyDataCenter {
-        // get the bet details from storage
-        BetDetails storage bet = betDetailsRegistry[_betDetails.betContract];
-        require(
-            bet.betContract == _betDetails.betContract,
-            "Invalid bet contract"
-        );
+    function recordVictory(
+        BetDetails memory _betDetails
+    ) external onlyUserManagement {
+        // increment the victories
+        victories++;
+        // update the pnl
+        pnl += _betDetails.payout;
+        // store the updated bet details
+        betDetailsRegistry[_betDetails.betContract] = _betDetails;
+    }
+
+    /**
+     * @dev Record a loss
+     * @param _betDetails BetDetails struct
+     */
+    function recordLoss(
+        BetDetails memory _betDetails
+    ) external onlyUserManagement {
+        // get the bet details from storage and increment the losses
+        losses++;
+        // update the pnl
+        pnl -= _betDetails.amount;
         // store the updated bet details
         betDetailsRegistry[_betDetails.betContract] = _betDetails;
     }
@@ -83,7 +100,7 @@ contract UserStorage is IShakeOnIt, Ownable {
      * @dev Cancel a bet
      * @param _betContract address of the bet contract
      */
-    function cancelBet(address _betContract) external onlyDataCenter {
+    function cancelBet(address _betContract) external onlyUserManagement {
         // remove the bet from the active bets
         for (uint256 i = 0; i < bets.length; i++) {
             if (bets[i] == _betContract) {
@@ -94,27 +111,6 @@ contract UserStorage is IShakeOnIt, Ownable {
         }
         // delete the bet
         delete betDetailsRegistry[_betContract];
-        // decrement the bet count
-        betCount--;
-    }
-
-    /**
-     * @dev Fund a bet
-     * @param _betContract address of the bet contract
-     * @param _amount amount to fund
-     */
-    function fundBet(address _betContract, uint256 _amount) external onlyOwner {
-        BetDetails memory betDetails = betDetailsRegistry[_betContract];
-        require(betDetails.betContract == _betContract, "Invalid bet contract");
-        require(
-            IERC20(betDetails.fundToken).transferFrom(
-                address(this),
-                _betContract,
-                _amount
-            ),
-            "Transfer failed"
-        );
-        balances[betDetails.fundToken] -= _amount;
     }
 
     /**
@@ -145,7 +141,7 @@ contract UserStorage is IShakeOnIt, Ownable {
      * @return uint256 number of bets
      */
     function getBetCount() external view returns (uint256) {
-        return betCount;
+        return bets.length;
     }
 
     /**

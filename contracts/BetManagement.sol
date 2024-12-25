@@ -9,8 +9,7 @@ import "./UserManagement.sol";
 contract BetManagement is Ownable, IShakeOnIt {
     uint256 public feesCollected;
     address[] public deployedBets;
-    address public betFactory;
-    UserManagement public userManagement;
+    DataCenter private dataCenter;
     mapping(address => bool) public isBet;
     mapping(address => BetDetails) public betDetailsRegistry;
 
@@ -19,22 +18,21 @@ contract BetManagement is Ownable, IShakeOnIt {
         _;
     }
 
-    modifier onlyBetFactory() {
-        require(msg.sender == betFactory, "Restricted to bet factory");
-        _;
-    }
-
-    constructor(address _multiSig, address _betFactory) Ownable(_multiSig) {
-        betFactory = _betFactory;
+    constructor(address _multiSig, address _dataCenter) Ownable(_multiSig) {
+        dataCenter = DataCenter(_dataCenter);
     }
 
     /**
      * @dev Create a new bet
      * @param _betDetails The details of the bet
      */
-    function createBet(BetDetails memory _betDetails) external onlyBetFactory {
+    function createBet(BetDetails memory _betDetails) external {
+        // check if the sender is the BetFactory contract, if not revert
+        address factory = DataCenter(dataCenter).getBetFactory();
+        require(factory == msg.sender, "Restricted to BetFactory contract");
+
         // get the user storage address
-        address userStorageAddress = userManagement.getUserStorage(
+        address userStorageAddress = dataCenter.getUserStorage(
             _betDetails.initiator
         );
         // create pointer to the user storage contract
@@ -72,24 +70,20 @@ contract BetManagement is Ownable, IShakeOnIt {
         // get the bet details
         BetDetails storage betDetails = betDetailsRegistry[msg.sender];
         // get the initiator's storage address and create pointer to the user storage contract
-        address initiatorStorageAddress = userManagement.getUserStorage(
+        address initiatorStorageAddress = dataCenter.getUserStorage(
             betDetails.initiator
         );
         UserStorage initiator = UserStorage(initiatorStorageAddress);
         // get the acceptor's storage address and create pointer to the user storage contract
-        address acceptorStorageAddress = userManagement.getUserStorage(
-            _acceptor
-        );
+        address acceptorStorageAddress = dataCenter.getUserStorage(_acceptor);
         UserStorage acceptor = UserStorage(acceptorStorageAddress);
 
         // update the state of the bet
-        betDetails.accepted = true;
         betDetails.acceptor = acceptorStorageAddress;
         betDetails.status = BetStatus.FUNDED;
-        // save the bet for the acceptor
+        // save the bet for the acceptor and the initiator
         acceptor.saveBet(betDetails);
-        // update the bet for the initiator
-        initiator.updateBet(betDetails);
+        initiator.saveBet(betDetails);
         // ujpdate the bet details registry
         betDetailsRegistry[msg.sender] = betDetails;
 
@@ -103,15 +97,23 @@ contract BetManagement is Ownable, IShakeOnIt {
         );
     }
 
+    /**
+     * @notice Declares the winner of the bet.
+     * @param _betContract The address of the bet contract
+     * @param _arbiter The address of the arbiter
+     * @param _winner The address of the winner
+     * @param _loser The address of the loser
+     */
     function declareWinner(
         address _betContract,
         address _arbiter,
         address _winner,
-        address _loser
+        address _loser,
+        uint256 _platFormFee
     ) external onlyBet {
         // get the user storage address for both the winner and the loser
-        address winnerStorageAddress = userManagement.getUserStorage(_winner);
-        address loserStorageAddress = userManagement.getUserStorage(_loser);
+        address winnerStorageAddress = dataCenter.getUserStorage(_winner);
+        address loserStorageAddress = dataCenter.getUserStorage(_loser);
         // get the user storage contracts
         UserStorage winnerStorage = UserStorage(winnerStorageAddress);
         UserStorage loserStorage = UserStorage(loserStorageAddress);
@@ -121,8 +123,10 @@ contract BetManagement is Ownable, IShakeOnIt {
         betDetails.status = BetStatus.WON;
         betDetails.winner = _winner;
         // update the bet details in both the winner's and loser's storage
-        winnerStorage.updateBet(betDetails);
-        loserStorage.updateBet(betDetails);
+        winnerStorage.recordVictory(betDetails);
+        loserStorage.recordLoss(betDetails);
+        // add the platform fee to the fees collected
+        feesCollected += _platFormFee;
         // emit BetWon event
         emit BetWon(
             _betContract,
@@ -138,7 +142,7 @@ contract BetManagement is Ownable, IShakeOnIt {
      */
     function cancelBet(address _initiator) external onlyBet {
         // get the user storage address
-        address userStorageAddress = userManagement.getUserStorage(_initiator);
+        address userStorageAddress = dataCenter.getUserStorage(_initiator);
         UserStorage userStorage = UserStorage(userStorageAddress);
         // cancel the bet
         userStorage.cancelBet(msg.sender);
@@ -150,8 +154,8 @@ contract BetManagement is Ownable, IShakeOnIt {
         emit BetCancelled(msg.sender, _initiator);
     }
 
-    function reportFeesCollected(uint256 _fees) external onlyBet {
-        feesCollected += _fees;
+    function getFeesCollected() external view returns (uint256) {
+        return feesCollected;
     }
 
     function getBets() external view returns (address[] memory) {
@@ -165,7 +169,7 @@ contract BetManagement is Ownable, IShakeOnIt {
     }
 
     function getUserStorage(address _user) external view returns (address) {
-        return userManagement.getUserStorage(_user);
+        return dataCenter.getUserStorage(_user);
     }
 
     function getMultiSig() external view returns (address) {

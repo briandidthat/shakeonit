@@ -2,26 +2,18 @@
 pragma solidity ^0.8.0;
 
 import "./Bet.sol";
-import "./interfaces/IShakeOnIt.sol";
 import "./BetManagement.sol";
 import "./DataCenter.sol";
-import "@openzeppelin/contracts/proxy/Clones.sol";
+import "./interfaces/IShakeOnIt.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract BetFactory is Ownable, IShakeOnIt {
-    address private implementation;
-    uint256 private platformPercentage;
     uint256 private instances;
     DataCenter private dataCenter;
 
-    constructor(
-        address _dataCenter,
-        uint256 _platformPercentage
-    ) Ownable(msg.sender) {
-        implementation = address(new Bet());
+    constructor(address _dataCenter) Ownable(msg.sender) {
         dataCenter = DataCenter(_dataCenter);
-        platformPercentage = _platformPercentage;
     }
 
     /**
@@ -38,43 +30,42 @@ contract BetFactory is Ownable, IShakeOnIt {
         uint256 _amount,
         uint256 _arbiterFee,
         uint256 _platformFee,
+        uint256 _payout,
         uint256 _deadline,
         string memory _condition
     ) external returns (address) {
+        require(dataCenter.isUser(msg.sender), "User has not registered");
         require(_amount > 0, "Amount should be greater than 0");
         require(
             msg.sender != address(0) && _arbiter != address(0),
             "Zero address not allowed"
         );
+
         // get the user storage address
         address userStorageAddress = dataCenter.getUserStorage(msg.sender);
-        require(userStorageAddress != address(0), "User has not registered");
+        // check if the user has sufficient balance for the bet amount
         require(
             IERC20(_fundToken).balanceOf(userStorageAddress) >= _amount,
             "Insufficient balance"
         );
 
-        // Create a new bet clone
-        address bet = Clones.clone(implementation);
-        // Initialize the bet clone
-        Bet(bet).initialize(
+        // Deploy a new bet contract
+        Bet bet = new Bet(
             address(dataCenter),
             userStorageAddress,
             _arbiter,
             _fundToken,
             _amount,
+            _payout,
             _deadline,
             _arbiterFee,
             _platformFee,
             _condition
         );
 
-        // increment the number of instances
-        instances++;
-
-        // create bet details
+        // create bet details for storage
         BetDetails memory betDetails = BetDetails({
-            betContract: bet,
+            betContract: address(bet),
             initiator: userStorageAddress,
             acceptor: address(0),
             arbiter: _arbiter,
@@ -82,24 +73,19 @@ contract BetFactory is Ownable, IShakeOnIt {
             loser: address(0),
             fundToken: _fundToken,
             amount: _amount,
+            payout: _payout,
             deadline: _deadline,
-            accepted: false,
-            message: _condition,
             status: BetStatus.INITIATED
         });
 
-        // store the bet details in the data center
-        address betManagement = dataCenter.getBetManagement();
-        BetManagement(betManagement).createBet(betDetails);
+        // get the BetManagement contract
+        address betManagementAddress = dataCenter.getBetManagement();
+        BetManagement betManagement = BetManagement(betManagementAddress);
+        // store the bet details in the bet management contract
+        betManagement.createBet(betDetails);
+        // increment the number of instances
+        instances++;
         // return the address of the bet
-        return bet;
-    }
-
-    function getImplementation() external view returns (address) {
-        return implementation;
-    }
-
-    function getPlatformPercentage() external view returns (uint256) {
-        return platformPercentage;
+        return address(bet);
     }
 }
