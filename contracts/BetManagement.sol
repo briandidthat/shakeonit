@@ -5,32 +5,46 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "./UserStorage.sol";
 import "./BetFactory.sol";
 import "./UserManagement.sol";
+import "./Restricted.sol";
 
-contract BetManagement is Ownable, IShakeOnIt {
+contract BetManagement is IShakeOnIt, Restricted {
+    bool private initialized;
     uint256 public feesCollected;
     address[] public deployedBets;
     DataCenter private dataCenter;
     mapping(address => bool) public isBet;
     mapping(address => BetDetails) public betDetailsRegistry;
 
-    modifier onlyBet() {
-        require(isBet[msg.sender], "Restricted to bet contracts");
+    modifier isInitialized() {
+        require(initialized, "Contract not initialized");
         _;
     }
 
-    constructor(address _multiSig, address _dataCenter) Ownable(_multiSig) {
-        dataCenter = DataCenter(_dataCenter);
+    constructor(address _multiSig) {
+        // grant the default admin role to the multiSig address
+        _grantRole(DEFAULT_ADMIN_ROLE, _multiSig);
+        // set the owner role to the multiSig address
+        _grantRole(MULTISIG_ROLE, _multiSig);
+    }
+
+    /**
+     * @dev Initialize the contract with the addresses of the contracts that need to be granted the CONTRACT_ROLE
+     * @param contracts The addresses of the contracts that need to be granted the CONTRACT_ROLE
+     */
+    function initialize(
+        Requestor[] calldata contracts
+    ) external onlyRole(MULTISIG_ROLE) {
+        _initializeRoles(contracts);
+        initialized = true;
     }
 
     /**
      * @dev Create a new bet
      * @param _betDetails The details of the bet
      */
-    function createBet(BetDetails memory _betDetails) external {
-        // check if the sender is the BetFactory contract, if not revert
-        address factory = dataCenter.getBetFactory();
-        require(factory == msg.sender, "Restricted to BetFactory contract");
-
+    function createBet(
+        BetDetails memory _betDetails
+    ) external isInitialized onlyRole(WRITE_ACCESS_ROLE) {
         address userStorageAddress = dataCenter.getUserStorage(
             _betDetails.initiator
         );
@@ -52,6 +66,9 @@ contract BetManagement is Ownable, IShakeOnIt {
         // get the user managemet contract address and create a pointer to the contract to save bet
         userStorage.saveBet(_betDetails);
 
+        // grant the bet contract the BET_CONTRACT_ROLE
+        _grantRole(BET_CONTRACT_ROLE, _betDetails.betContract);
+
         // emit BetCreated event
         emit BetCreated(
             _betDetails.betContract,
@@ -66,9 +83,11 @@ contract BetManagement is Ownable, IShakeOnIt {
     /**
      * @notice Accepts the bet and funds the escrow.
      */
-    function acceptBet(address _acceptor) external onlyBet {
+    function acceptBet(
+        address _acceptor
+    ) external isInitialized onlyRole(BET_CONTRACT_ROLE) {
         // get the bet details
-        BetDetails storage betDetails = betDetailsRegistry[msg.sender];
+        BetDetails storage betDetails = betDetailsRegistry[_acceptor];
         // get the initiator's storage address and create pointer to the user storage contract
         address initiatorStorageAddress = dataCenter.getUserStorage(
             betDetails.initiator
@@ -110,7 +129,7 @@ contract BetManagement is Ownable, IShakeOnIt {
         address _winner,
         address _loser,
         uint256 _platFormFee
-    ) external onlyBet {
+    ) external onlyRole(BET_CONTRACT_ROLE) {
         // get the user storage address for both the winner and the loser
         address winnerStorageAddress = dataCenter.getUserStorage(_winner);
         address loserStorageAddress = dataCenter.getUserStorage(_loser);
@@ -140,7 +159,9 @@ contract BetManagement is Ownable, IShakeOnIt {
     /**
      * @notice Cancels the bet and updates the state.
      */
-    function cancelBet(address _initiator) external onlyBet {
+    function cancelBet(
+        address _initiator
+    ) external onlyRole(BET_CONTRACT_ROLE) {
         // get the user storage address
         address userStorageAddress = dataCenter.getUserStorage(_initiator);
         UserStorage userStorage = UserStorage(userStorageAddress);
@@ -173,6 +194,6 @@ contract BetManagement is Ownable, IShakeOnIt {
     }
 
     function getMultiSig() external view returns (address) {
-        return owner();
+        return dataCenter.getMultiSig();
     }
 }

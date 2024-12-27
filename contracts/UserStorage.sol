@@ -4,11 +4,9 @@ pragma solidity ^0.8.0;
 import "./interfaces/IShakeOnIt.sol";
 import "@openzeppelin/contracts/proxy/Clones.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "./DataCenter.sol";
+import "./Restricted.sol";
 
-contract UserStorage is IShakeOnIt, Ownable {
-    address private dataCenter;
+contract UserStorage is IShakeOnIt, Restricted {
     uint256 private victories;
     uint256 private losses;
     uint256 private pnl;
@@ -16,8 +14,15 @@ contract UserStorage is IShakeOnIt, Ownable {
     mapping(address => BetDetails) public betDetailsRegistry;
     mapping(address => uint256) public balances;
 
-    constructor(address _owner, address _dataCenter) Ownable(_owner) {
-        dataCenter = _dataCenter;
+    constructor(address _owner, Requestor[] memory contracts) {
+        _grantRole(DEFAULT_ADMIN_ROLE, _owner);
+        // grant the owner role to the owner
+        _grantRole(OWNER_ROLE, _owner);
+        // grant the contract role to the contracts
+        for (uint256 i = 0; i < contracts.length; i++) {
+            Requestor memory requestor = contracts[i];
+            _grantRole(requestor.role, requestor.caller);
+        }
     }
 
     /**
@@ -25,7 +30,10 @@ contract UserStorage is IShakeOnIt, Ownable {
      * @param _token address of the token
      * @param _amount amount of the token
      */
-    function deposit(address _token, uint256 _amount) external onlyOwner {
+    function deposit(
+        address _token,
+        uint256 _amount
+    ) external onlyRole(OWNER_ROLE) {
         IERC20 token = IERC20(_token);
         require(
             token.transferFrom(msg.sender, address(this), _amount),
@@ -39,7 +47,10 @@ contract UserStorage is IShakeOnIt, Ownable {
      * @param _token address of the token
      * @param _amount amount of the token
      */
-    function withdraw(address _token, uint256 _amount) external onlyOwner {
+    function withdraw(
+        address _token,
+        uint256 _amount
+    ) external onlyRole(OWNER_ROLE) {
         require(balances[_token] >= _amount, "Insufficient balance");
         IERC20 token = IERC20(_token);
         require(token.transfer(msg.sender, _amount), "Transfer failed");
@@ -50,15 +61,17 @@ contract UserStorage is IShakeOnIt, Ownable {
      * @dev store a bet contract
      * @param _betDetails BetDetails struct
      */
-    function saveBet(BetDetails memory _betDetails) external {
-        address betManagement = DataCenter(dataCenter).getBetManagement();
-        require(msg.sender == betManagement, "Restricted to betManagement");
-
+    function saveBet(
+        BetDetails memory _betDetails
+    ) external onlyRole(WRITE_ACCESS_ROLE) {
         BetDetails storage bet = betDetailsRegistry[_betDetails.betContract];
         // if bet is not already stored, add it to the list
         if (bet.betContract == address(0)) {
             bets.push(_betDetails.betContract);
         }
+        // grant the write access role to the bet contract
+        _grantRole(WRITE_ACCESS_ROLE, _betDetails.betContract);
+
         // store the bet details
         betDetailsRegistry[_betDetails.betContract] = _betDetails;
     }
@@ -67,7 +80,9 @@ contract UserStorage is IShakeOnIt, Ownable {
      * @dev Record a victory
      * @param _betDetails BetDetails struct
      */
-    function recordVictory(BetDetails memory _betDetails) external {
+    function recordVictory(
+        BetDetails memory _betDetails
+    ) external onlyRole(WRITE_ACCESS_ROLE) {
         // increment the victories
         victories++;
         // update the pnl
@@ -80,7 +95,9 @@ contract UserStorage is IShakeOnIt, Ownable {
      * @dev Record a loss
      * @param _betDetails BetDetails struct
      */
-    function recordLoss(BetDetails memory _betDetails) external {
+    function recordLoss(
+        BetDetails memory _betDetails
+    ) external onlyRole(WRITE_ACCESS_ROLE) {
         // get the bet details from storage and increment the losses
         losses++;
         // update the pnl
@@ -93,7 +110,9 @@ contract UserStorage is IShakeOnIt, Ownable {
      * @dev Cancel a bet
      * @param _betContract address of the bet contract
      */
-    function cancelBet(address _betContract) external {
+    function cancelBet(
+        address _betContract
+    ) external onlyRole(WRITE_ACCESS_ROLE) {
         // remove the bet from the active bets
         for (uint256 i = 0; i < bets.length; i++) {
             if (bets[i] == _betContract) {
@@ -116,7 +135,7 @@ contract UserStorage is IShakeOnIt, Ownable {
         address _token,
         address _spender,
         uint256 _amount
-    ) external onlyOwner {
+    ) external onlyRole(OWNER_ROLE) {
         require(_amount > 0, "Amount must be greater than 0");
         // approve the spender to spend the amount
         IERC20(_token).approve(_spender, _amount);

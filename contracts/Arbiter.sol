@@ -4,17 +4,17 @@ pragma solidity ^0.8.0;
 import "./interfaces/IShakeOnIt.sol";
 import "./DataCenter.sol";
 import "./Bet.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "./Restricted.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract Arbiter is IShakeOnIt, Ownable {
+contract Arbiter is IShakeOnIt, Restricted {
     enum ArbiterStatus {
         ACTIVE,
         PENDING,
         SUSPENDED,
         BLOCKED
     }
-    address private arbiterManagement;
+    address private owner;
     uint256 private feesCollected;
     uint256 private betsJudged;
     ArbiterStatus private status;
@@ -23,17 +23,16 @@ contract Arbiter is IShakeOnIt, Ownable {
     mapping(address => bool) private betIsActive;
     mapping(address => bool) private betWasDeclared;
 
-    constructor(address _owner, address _arbiterManagement) Ownable(_owner) {
-        arbiterManagement = _arbiterManagement;
+    constructor(address _owner, Requestor[] memory contracts) {
         status = ArbiterStatus.PENDING;
-    }
-
-    modifier onlyArbiterManagement() {
-        require(
-            msg.sender == arbiterManagement,
-            "Restricted to arbiter management"
-        );
-        _;
+        owner = _owner;
+        // grant the owner role to the owner
+        _grantRole(OWNER_ROLE, _owner);
+        // grant the contract role to the contracts
+        for (uint256 i = 0; i < contracts.length; i++) {
+            Requestor memory requestor = contracts[i];
+            _grantRole(requestor.role, requestor.caller);
+        }
     }
 
     /**
@@ -47,7 +46,7 @@ contract Arbiter is IShakeOnIt, Ownable {
         address _winner,
         address _loser,
         uint256 _payment
-    ) external onlyOwner {
+    ) external onlyRole(OWNER_ROLE) {
         require(betIsActive[_betContract], "Bet is not active");
         require(!betWasDeclared[_betContract], "Winner already declared");
         // declare winner
@@ -70,38 +69,21 @@ contract Arbiter is IShakeOnIt, Ownable {
      * @param _amount Amount of tokens to collect
      * @custom:access Only owner
      */
-    function collectFees(address _token, uint256 _amount) external onlyOwner {
+    function collectFees(
+        address _token,
+        uint256 _amount
+    ) external onlyRole(OWNER_ROLE) {
         require(balances[_token] >= _amount, "Insufficient balance");
         require(status != ArbiterStatus.SUSPENDED, "Withdrawals are suspended");
         // transfer fees to owner
-        require(IERC20(_token).transfer(owner(), _amount), "Transfer failed");
-        // update token balance
-        balances[_token] -= _amount;
-    }
-
-    /**
-     * @notice Penalize arbiter contract. Withdrawals are suspended when arbiter is suspended.
-     * @param _token Address of the token to penalize in
-     * @param _amount Amount of tokens to penalize
-     * @custom:access Only arbiter management
-     */
-    function penalize(
-        address _token,
-        uint256 _amount
-    ) external onlyArbiterManagement {
-        require(balances[_token] >= _amount, "Insufficient balance");
-        require(status == ArbiterStatus.SUSPENDED, "Arbiter is not suspended");
-        // transfer amount to multiSig
-        address multiSig = ArbiterManagement(arbiterManagement).getMultiSig();
-        // transfer fees to multiSig
-        require(IERC20(_token).transfer(multiSig, _amount), "Transfer failed");
+        require(IERC20(_token).transfer(owner, _amount), "Transfer failed");
         // update token balance
         balances[_token] -= _amount;
     }
 
     function setArbiterStatus(
         ArbiterStatus _status
-    ) external onlyArbiterManagement {
+    ) external onlyRole(WRITE_ACCESS_ROLE) {
         status = _status;
     }
 

@@ -8,7 +8,7 @@ import "./interfaces/IShakeOnIt.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract BetFactory is Ownable, IShakeOnIt {
+contract BetFactory is Ownable {
     uint256 private instances;
     DataCenter private dataCenter;
 
@@ -68,7 +68,7 @@ contract BetFactory is Ownable, IShakeOnIt {
         );
 
         // create bet details for storage
-        BetDetails memory betDetails = bet.getBetDetails();
+        IShakeOnIt.BetDetails memory betDetails = bet.getBetDetails();
         // store the bet details in the bet management contract
         betManagement.createBet(betDetails);
         // increment the number of instances
