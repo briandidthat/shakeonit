@@ -7,10 +7,11 @@ import "./Arbiter.sol";
 import "./BetManagement.sol";
 import "./UserManagement.sol";
 import "./ArbiterManagement.sol";
+import "./BetFactory.sol";
 
 contract DataCenter is Ownable {
     address private multiSigWallet;
-    address private betFactory;
+    BetFactory private betFactory;
     UserManagement private userManagement;
     ArbiterManagement private arbiterManagement;
     BetManagement private betManagement;
@@ -20,21 +21,19 @@ contract DataCenter is Ownable {
         address indexed newMultiSig
     );
 
-    constructor(
-        address _multiSigWallet,
-        address _factory
-    ) Ownable(_multiSigWallet) {
+    constructor(address _multiSigWallet) Ownable(_multiSigWallet) {
         multiSigWallet = _multiSigWallet;
-        betFactory = _factory;
-        // create the user management contract
+        // create pointer to the bet factory contract
+        betFactory = new BetFactory(multiSigWallet, address(this));
+        // deploy new user management contract
         userManagement = new UserManagement(multiSigWallet, address(this));
-        // create the arbiter management contract
+        // create pointer to the arbiter management contract
         arbiterManagement = new ArbiterManagement(
             _multiSigWallet,
             address(this)
         );
-        // create the bet management contract
-        betManagement = new BetManagement(_multiSigWallet, address(this));
+        // create pointer to the bet management contract
+        betManagement = new BetManagement(multiSigWallet, address(this));
     }
 
     function setNewMultiSig(address _newMultiSig) external onlyOwner {
@@ -65,7 +64,7 @@ contract DataCenter is Ownable {
     }
 
     function getBetFactory() external view returns (address) {
-        return betFactory;
+        return address(betFactory);
     }
 
     function getUserStorage(address _user) external view returns (address) {
