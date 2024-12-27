@@ -3,9 +3,10 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./UserStorage.sol";
+import "./DataCenter.sol";
 
 contract UserManagement is Ownable {
-    address public dataCenter;
+    DataCenter private dataCenter;
     address[] public users;
     address[] public userStorageContracts;
     mapping(address => bool) public isUser;
@@ -15,7 +16,7 @@ contract UserManagement is Ownable {
 
     modifier onlyDataCenter() {
         require(
-            msg.sender == dataCenter,
+            msg.sender == address(dataCenter),
             "Only data center can call this function"
         );
         _;
@@ -25,7 +26,7 @@ contract UserManagement is Ownable {
         address _multiSigWallet,
         address _dataCenter
     ) Ownable(_multiSigWallet) {
-        dataCenter = _dataCenter;
+        dataCenter = DataCenter(_dataCenter);
     }
 
     /**
@@ -38,13 +39,15 @@ contract UserManagement is Ownable {
         // add the user to the list of users
         users.push(_user);
         // create a new user storage contract and store the address in the user storage registry
-        UserStorage userStorage = new UserStorage(_user, address(this));
+        UserStorage userStorage = new UserStorage(_user, address(dataCenter));
         address userStorageAddress = address(userStorage);
-
         userStorageRegistry[_user] = userStorageAddress;
         userStorageContracts.push(userStorageAddress);
+        // set isUser to true
         isUser[_user] = true;
+        // emit UserAdded event
         emit UserAdded(_user, address(userStorage));
+
         return address(userStorage);
     }
 

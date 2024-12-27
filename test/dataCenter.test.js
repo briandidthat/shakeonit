@@ -8,10 +8,7 @@ describe("DataCenter", function () {
   beforeEach(async function () {
     [multiSig, newMultiSig, addr1, addr2] = await ethers.getSigners();
     // Deploy the DataCenter contract
-    dataCenter = await ethers.deployContract("DataCenter", [
-      multiSig.address,
-      addr1.address,
-    ]);
+    dataCenter = await ethers.deployContract("DataCenter", [multiSig.address]);
   });
 
   it("Should set a new multi-sig wallet", async function () {
