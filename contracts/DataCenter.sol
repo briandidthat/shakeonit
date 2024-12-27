@@ -7,10 +7,11 @@ import "./Arbiter.sol";
 import "./BetManagement.sol";
 import "./UserManagement.sol";
 import "./ArbiterManagement.sol";
+import "./BetFactory.sol";
 
 contract DataCenter is Ownable {
     address private multiSigWallet;
-    address private betFactory;
+    BetFactory private betFactory;
     UserManagement private userManagement;
     ArbiterManagement private arbiterManagement;
     BetManagement private betManagement;
@@ -20,18 +21,19 @@ contract DataCenter is Ownable {
         address indexed newMultiSig
     );
 
-    constructor(
-        address _multiSigWallet,
-        address _factory
-    ) Ownable(_multiSigWallet) {
+    constructor(address _multiSigWallet) Ownable(_multiSigWallet) {
         multiSigWallet = _multiSigWallet;
-        betFactory = _factory;
-        // create the user management contract
-        userManagement = new UserManagement(multiSigWallet);
-        // create the arbiter management contract
-        arbiterManagement = new ArbiterManagement(_multiSigWallet);
-        // create the bet management contract
-        betManagement = new BetManagement(_multiSigWallet, address(this));
+        // create pointer to the bet factory contract
+        betFactory = new BetFactory(multiSigWallet, address(this));
+        // deploy new user management contract
+        userManagement = new UserManagement(multiSigWallet, address(this));
+        // create pointer to the arbiter management contract
+        arbiterManagement = new ArbiterManagement(
+            _multiSigWallet,
+            address(this)
+        );
+        // create pointer to the bet management contract
+        betManagement = new BetManagement(multiSigWallet, address(this));
     }
 
     function setNewMultiSig(address _newMultiSig) external onlyOwner {
@@ -62,7 +64,7 @@ contract DataCenter is Ownable {
     }
 
     function getBetFactory() external view returns (address) {
-        return betFactory;
+        return address(betFactory);
     }
 
     function getUserStorage(address _user) external view returns (address) {
@@ -74,10 +76,26 @@ contract DataCenter is Ownable {
     }
 
     function isArbiter(address _arbiter) external view returns (bool) {
-        return arbiterManagement.isArbiter(_arbiter);
+        return arbiterManagement.isRegistered(_arbiter);
     }
 
     function isUser(address _user) external view returns (bool) {
         return userManagement.isUser(_user);
+    }
+
+    /**
+     * @dev Register a new user
+     * @param _user The address of the user
+     */
+    function registerUser(address _user) external {
+        userManagement.addUser(_user);
+    }
+
+    /**
+     * @dev Register a new arbiter
+     * @param _arbiter The address of the arbiter
+     */
+    function registerArbiter(address _arbiter) external onlyOwner {
+        arbiterManagement.addArbiter(_arbiter);
     }
 }

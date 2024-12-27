@@ -55,10 +55,6 @@ contract Bet is IShakeOnIt {
         deadline = _deadline;
         condition = _condition;
         status = BetStatus.INITIATED;
-        // temp values
-        acceptor = address(0);
-        winner = address(0);
-        loser = address(0);
     }
 
     /**
@@ -170,6 +166,26 @@ contract Bet is IShakeOnIt {
         balances[userStorageAddress] = 0;
         // update the status of the bet
         status = BetStatus.SETTLED;
+    }
+
+    function getBetDetails()
+        external
+        view
+        returns (BetDetails memory betDetails)
+    {
+        betDetails = BetDetails({
+            betContract: address(this),
+            initiator: initiator,
+            acceptor: acceptor,
+            arbiter: arbiter,
+            winner: winner,
+            loser: loser,
+            fundToken: address(fundToken),
+            amount: amount,
+            payout: payout,
+            deadline: deadline,
+            status: status
+        });
     }
 
     function getArbiter() external view returns (address) {

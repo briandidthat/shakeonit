@@ -12,7 +12,7 @@ contract BetFactory is Ownable, IShakeOnIt {
     uint256 private instances;
     DataCenter private dataCenter;
 
-    constructor(address _dataCenter) Ownable(msg.sender) {
+    constructor(address _multiSig, address _dataCenter) Ownable(_multiSig) {
         dataCenter = DataCenter(_dataCenter);
     }
 
@@ -49,43 +49,35 @@ contract BetFactory is Ownable, IShakeOnIt {
             "Insufficient balance"
         );
 
+        // get the BetManagement contract
+        address betManagementAddress = dataCenter.getBetManagement();
+        BetManagement betManagement = BetManagement(betManagementAddress);
+
         // Deploy a new bet contract
         Bet bet = new Bet(
-            address(dataCenter),
-            userStorageAddress,
-            _arbiter,
+            betManagementAddress,
             _fundToken,
+            msg.sender,
+            _arbiter,
             _amount,
-            _payout,
-            _deadline,
             _arbiterFee,
             _platformFee,
+            _payout,
+            _deadline,
             _condition
         );
 
         // create bet details for storage
-        BetDetails memory betDetails = BetDetails({
-            betContract: address(bet),
-            initiator: userStorageAddress,
-            acceptor: address(0),
-            arbiter: _arbiter,
-            winner: address(0),
-            loser: address(0),
-            fundToken: _fundToken,
-            amount: _amount,
-            payout: _payout,
-            deadline: _deadline,
-            status: BetStatus.INITIATED
-        });
-
-        // get the BetManagement contract
-        address betManagementAddress = dataCenter.getBetManagement();
-        BetManagement betManagement = BetManagement(betManagementAddress);
+        BetDetails memory betDetails = bet.getBetDetails();
         // store the bet details in the bet management contract
         betManagement.createBet(betDetails);
         // increment the number of instances
         instances++;
         // return the address of the bet
         return address(bet);
+    }
+
+    function getInstances() external view returns (uint256) {
+        return instances;
     }
 }

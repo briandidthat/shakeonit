@@ -3,8 +3,10 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./UserStorage.sol";
+import "./DataCenter.sol";
 
 contract UserManagement is Ownable {
+    DataCenter private dataCenter;
     address[] public users;
     address[] public userStorageContracts;
     mapping(address => bool) public isUser;
@@ -12,22 +14,40 @@ contract UserManagement is Ownable {
     // event to be emitted when a new user is added
     event UserAdded(address indexed user, address indexed userStorage);
 
-    constructor(address _multiSigWallet) Ownable(_multiSigWallet) {}
+    modifier onlyDataCenter() {
+        require(
+            msg.sender == address(dataCenter),
+            "Only data center can call this function"
+        );
+        _;
+    }
+
+    constructor(
+        address _multiSigWallet,
+        address _dataCenter
+    ) Ownable(_multiSigWallet) {
+        dataCenter = DataCenter(_dataCenter);
+    }
 
     /**
      * @dev Add a new user
      * @param _user The address of the user
      */
-    function addUser(address _user) external onlyOwner returns (address) {
+    function addUser(address _user) external onlyDataCenter returns (address) {
         require(_user != address(0), "Zero address not allowed");
         require(!isUser[_user], "User already registered");
-        // create a new user storage contract and store the address in the user storage registry
-        UserStorage userStorage = new UserStorage(_user, address(this));
-        userStorageRegistry[_user] = address(userStorage);
+        // add the user to the list of users
         users.push(_user);
-        userStorageContracts.push(address(userStorage));
+        // create a new user storage contract and store the address in the user storage registry
+        UserStorage userStorage = new UserStorage(_user, address(dataCenter));
+        address userStorageAddress = address(userStorage);
+        userStorageRegistry[_user] = userStorageAddress;
+        userStorageContracts.push(userStorageAddress);
+        // set isUser to true
         isUser[_user] = true;
+        // emit UserAdded event
         emit UserAdded(_user, address(userStorage));
+
         return address(userStorage);
     }
 

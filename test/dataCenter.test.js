@@ -8,10 +8,7 @@ describe("DataCenter", function () {
   beforeEach(async function () {
     [multiSig, newMultiSig, addr1, addr2] = await ethers.getSigners();
     // Deploy the DataCenter contract
-    dataCenter = await ethers.deployContract("DataCenter", [
-      multiSig.address,
-      addr1.address,
-    ]);
+    dataCenter = await ethers.deployContract("DataCenter", [multiSig.address]);
   });
 
   it("Should set a new multi-sig wallet", async function () {
@@ -42,27 +39,35 @@ describe("DataCenter", function () {
     expect(await dataCenter.getBetFactory()).to.be.a.properAddress;
   });
 
-  //   it("Should get the user storage address", async function () {
-  //     await userManagement.addUser(addr1.address);
-  //     const userStorageAddress = await dataCenter.getUserStorage(addr1.address);
-  //     expect(userStorageAddress).to.properAddress;
-  //   });
+  it("Should check if an address is a user", async function () {
+    // get the user management address
+    await dataCenter.connect(multiSig).registerUser(addr1.address);
+    // check if the address is a user
+    const isUser = await dataCenter.isUser(addr1.address);
+    expect(isUser).to.be.true;
+  });
 
-  //   it("Should get the arbiter address", async function () {
-  //     await arbiterManagement.addArbiter(addr1.address);
-  //     const arbiterAddress = await dataCenter.getArbiter(addr1.address);
-  //     expect(arbiterAddress).to.equal(addr1.address);
-  //   });
+  it("Should get the user storage address", async function () {
+    // register a user
+    await dataCenter.registerUser(addr1.address);
+    // get the user storage address
+    const userAddress = await dataCenter.getUserStorage(addr1.address);
+    expect(userAddress).to.be.a.properAddress;
+  });
 
-  //   it("Should check if an address is an arbiter", async function () {
-  //     await arbiterManagement.addArbiter(addr1.address);
-  //     const isArbiter = await dataCenter.isArbiter(addr1.address);
-  //     expect(isArbiter).to.be.true;
-  //   });
+  it("Should check if an address is an arbiter", async function () {
+    // create an arbiter
+    await dataCenter.connect(multiSig).registerArbiter(addr1.address);
+    // check if the address is an arbiter
+    const isArbiter = await dataCenter.isArbiter(addr1.address);
+    expect(isArbiter).to.be.true;
+  });
 
-  // it("Should check if an address is a user", async function () {
-  //   await userManagement.addUser(addr1.address);
-  //   const isUser = await dataCenter.isUser(addr1.address);
-  //   expect(isUser).to.be.true;
-  // });
+  it("Should get the arbiter address", async function () {
+    // register an arbiter
+    await dataCenter.connect(multiSig).registerArbiter(addr1.address);
+    // get the arbiter address
+    const arbiterAddress = await dataCenter.getArbiter(addr1.address);
+    expect(arbiterAddress).to.be.a.properAddress;
+  });
 });
