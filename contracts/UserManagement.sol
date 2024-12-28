@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "./UserStorage.sol";
 import "./DataCenter.sol";
 import "./Restricted.sol";
@@ -42,7 +41,7 @@ contract UserManagement is Restricted {
      * @dev Add a new user
      * @param _user The address of the user
      */
-    function addUser(
+    function register(
         address _user,
         Requestor[] calldata contracts
     ) external isInitialized returns (address) {

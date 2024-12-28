@@ -69,22 +69,12 @@ contract DataCenter is Restricted {
         emit MultiSigChanged(_newMultiSig, multiSigWallet);
     }
 
-    /**
-     * @dev Register a new user
-     * @param _user The address of the user
-     */
-    function registerUser(address _user) external onlyRole(WRITE_ACCESS_ROLE) {
-        userManagement.addUser(_user, contracts);
+    function isUser(address _user) external view returns (bool) {
+        return userManagement.isUser(_user);
     }
 
-    /**
-     * @dev Register a new arbiter
-     * @param _arbiter The address of the arbiter
-     */
-    function registerArbiter(
-        address _arbiter
-    ) external onlyRole(WRITE_ACCESS_ROLE) {
-        arbiterManagement.addArbiter(_arbiter, contracts);
+    function isArbiter(address _arbiter) external view returns (bool) {
+        return arbiterManagement.isRegistered(_arbiter);
     }
 
     function getMultiSig() external view returns (address) {
@@ -109,14 +99,6 @@ contract DataCenter is Restricted {
 
     function getArbiter(address _arbiter) external view returns (address) {
         return arbiterManagement.getArbiter(_arbiter);
-    }
-
-    function isArbiter(address _arbiter) external view returns (bool) {
-        return arbiterManagement.isRegistered(_arbiter);
-    }
-
-    function isUser(address _user) external view returns (bool) {
-        return userManagement.isUser(_user);
     }
 
     function getUserStorage(address _user) external view returns (address) {

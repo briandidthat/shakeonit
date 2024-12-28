@@ -34,6 +34,7 @@ contract ArbiterManagement is Restricted {
     function initialize(
         Requestor[] calldata contracts
     ) external onlyRole(MULTISIG_ROLE) {
+        require(!initialized, "Contract already initialized");
         _initializeRoles(contracts);
         initialized = true;
     }
