@@ -22,7 +22,6 @@ contract UserManagement is Restricted {
     }
 
     function register() external returns (address) {
-        require(msg.sender != address(0), "Zero address not allowed");
         require(!isUser[msg.sender], "User already registered");
         // create a new user storage contract and store the address in the user storage registry
         UserStorage userStorage = new UserStorage(msg.sender);
@@ -53,6 +52,10 @@ contract UserManagement is Restricted {
      */
     function getUsers() external view returns (address[] memory) {
         return users;
+    }
+
+    function getUserCount() external view returns (uint256) {
+        return users.length;
     }
 
     /**

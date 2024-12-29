@@ -144,4 +144,10 @@ contract BetManagement is IShakeOnIt, Restricted {
     function getBets() external view returns (address[] memory) {
         return deployedBets;
     }
+
+    function getUserBets(
+        address _user
+    ) external view returns (address[] memory) {
+        return betStorage.getUserBets(_user);
+    }
 }
