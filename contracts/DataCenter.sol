@@ -2,51 +2,40 @@
 pragma solidity ^0.8.0;
 
 import "./UserStorage.sol";
-import "./Arbiter.sol";
 import "./BetManagement.sol";
 import "./UserManagement.sol";
-import "./ArbiterManagement.sol";
-import "./BetFactory.sol";
 import "./Restricted.sol";
 
 contract DataCenter is Restricted {
     address private multiSigWallet;
-    BetFactory private betFactory;
-    UserManagement private userManagement;
-    ArbiterManagement private arbiterManagement;
-    BetManagement private betManagement;
-    Requestor[] private contracts;
+    address private userManagement;
+    address private betManagement;
 
     event MultiSigChanged(
         address indexed oldMultiSig,
         address indexed newMultiSig
     );
+    event UserManagementChanged(
+        address indexed oldUserManagement,
+        address indexed newUserManagement
+    );
+    event BetManagementChanged(
+        address indexed oldBetManagement,
+        address indexed newBetManagement
+    );
 
-    constructor(address _multiSigWallet) {
-        multiSigWallet = _multiSigWallet;
+    constructor(
+        address _multiSigWallet,
+        address _userManagement,
+        address _betManagement
+    ) {
+        // set the multi-sig wallet as the owner
         _grantRole(DEFAULT_ADMIN_ROLE, _multiSigWallet);
         _grantRole(MULTISIG_ROLE, _multiSigWallet);
-    }
 
-    function initialize(
-        address _userManagement,
-        address _arbiterManagement,
-        address _betManagement,
-        address _betFactory,
-        Requestor[] memory _contracts
-    ) external onlyRole(MULTISIG_ROLE) {
-        betFactory = BetFactory(_betFactory);
-        userManagement = UserManagement(_userManagement);
-        arbiterManagement = ArbiterManagement(_arbiterManagement);
-        betManagement = BetManagement(_betManagement);
-        // add the provided contracts to the contracts array
-        for (uint256 i = 0; i < _contracts.length; i++) {
-            contracts.push(_contracts[i]);
-        }
-        // initialize the contracts
-        userManagement.initialize(contracts);
-        arbiterManagement.initialize(contracts);
-        betManagement.initialize(contracts);
+        multiSigWallet = _multiSigWallet;
+        userManagement = _userManagement;
+        betManagement = _betManagement;
     }
 
     function setNewMultiSig(
@@ -63,18 +52,43 @@ contract DataCenter is Restricted {
         // remove the ownership from the old multi-sig
         _removeRole(MULTISIG_ROLE, multiSigWallet);
         _removeRole(DEFAULT_ADMIN_ROLE, multiSigWallet);
+
+        // emit MultiSigChanged event
+        emit MultiSigChanged(multiSigWallet, _newMultiSig);
         // update the multi-sig address
         multiSigWallet = _newMultiSig;
-        // emit MultiSigChanged event
-        emit MultiSigChanged(_newMultiSig, multiSigWallet);
+    }
+
+    function setNewUserManagement(
+        address _newUserManagement
+    ) external onlyRole(MULTISIG_ROLE) {
+        require(_newUserManagement != address(0), "Zero address not allowed");
+        require(
+            _newUserManagement != address(userManagement),
+            "UserManagement address is the same"
+        );
+        // emit UserManagementChanged event
+        emit UserManagementChanged(userManagement, _newUserManagement);
+        // update the userManagement address
+        userManagement = _newUserManagement;
+    }
+
+    function setNewBetManagement(
+        address _newBetManagement
+    ) external onlyRole(MULTISIG_ROLE) {
+        require(_newBetManagement != address(0), "Zero address not allowed");
+        require(
+            _newBetManagement != betManagement,
+            "BetManagement address is the same"
+        );
+        // emit BetManagementChanged event
+        emit BetManagementChanged(_newBetManagement, betManagement);
+        // update the betManagement address
+        betManagement = _newBetManagement;
     }
 
     function isUser(address _user) external view returns (bool) {
-        return userManagement.isUser(_user);
-    }
-
-    function isArbiter(address _arbiter) external view returns (bool) {
-        return arbiterManagement.isRegistered(_arbiter);
+        return UserManagement(userManagement).isUser(_user);
     }
 
     function getMultiSig() external view returns (address) {
@@ -82,26 +96,10 @@ contract DataCenter is Restricted {
     }
 
     function getUserManagement() external view returns (address) {
-        return address(userManagement);
-    }
-
-    function getArbiterManagement() external view returns (address) {
-        return address(arbiterManagement);
+        return userManagement;
     }
 
     function getBetManagement() external view returns (address) {
-        return address(betManagement);
-    }
-
-    function getBetFactory() external view returns (address) {
-        return address(betFactory);
-    }
-
-    function getArbiter(address _arbiter) external view returns (address) {
-        return arbiterManagement.getArbiter(_arbiter);
-    }
-
-    function getUserStorage(address _user) external view returns (address) {
-        return userManagement.getUserStorage(_user);
+        return betManagement;
     }
 }

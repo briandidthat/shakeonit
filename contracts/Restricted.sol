@@ -7,27 +7,10 @@ import "./interfaces/IShakeOnIt.sol";
 abstract contract Restricted is AccessControl {
     bytes32 public constant MULTISIG_ROLE = keccak256("MULTISIG_ROLE");
     bytes32 public constant WRITE_ACCESS_ROLE = keccak256("WRITE_ACCESS_ROLE");
+    bytes32 public constant USER_ROLE = keccak256("USER_ROLE");
     bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
     bytes32 public constant ARBITER_ROLE = keccak256("ARBITER_ROLE");
     bytes32 public constant BET_CONTRACT_ROLE = keccak256("BET_CONTRACT_ROLE");
-
-    struct Requestor {
-        bytes32 role;
-        address caller;
-    }
-
-    /**
-     * @dev Initialize the contract with the addresses of the contracts that need to be granted the CONTRACT_ROLE
-     * @param contracts The addresses of the contracts that need to be granted the CONTRACT_ROLE
-     */
-    function _initializeRoles(Requestor[] calldata contracts) internal {
-        for (uint256 i = 0; i < contracts.length; i++) {
-            Requestor memory requestor = contracts[i];
-            if (requestor.caller != address(0)) {
-                _grantRole(requestor.role, requestor.caller);
-            }
-        }
-    }
 
     /**
      * @dev Revoke the role from the address

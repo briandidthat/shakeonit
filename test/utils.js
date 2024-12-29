@@ -1,12 +1,5 @@
 const { ethers } = require("hardhat");
 
-async function getArbiterManagementFixture(multiSig) {
-  const arbiterManagement = await ethers.deployContract("ArbiterManagement", [
-    multiSig,
-  ]);
-  return arbiterManagement;
-}
-
 async function getUserManagementFixture(multiSig) {
   const userManagement = await ethers.deployContract("UserManagement", [
     multiSig,
@@ -21,25 +14,13 @@ async function getBetManagementFixture(multiSig) {
   return betManagement;
 }
 
-async function getArbiterFixture(multiSig, arbiterManagement) {
-  const arbiter = await ethers.deployContract("Arbiter", [
+async function getDataCenterFixture(multiSig, userManagement, betManagement) {
+  const dataCenter = await ethers.deployContract("DataCenter", [
     multiSig,
-    arbiterManagement,
+    userManagement,
+    betManagement,
   ]);
-  return arbiter;
-}
-
-async function getDataCenterFixture(multiSig) {
-  const dataCenter = await ethers.deployContract("DataCenter", [multiSig]);
   return dataCenter;
-}
-
-async function getFactoryFixture(multiSig, dataCenter) {
-  const factory = await ethers.deployContract("Factory", [
-    multiSig,
-    dataCenter,
-  ]);
-  return factory;
 }
 
 async function getTokenFixture(multiSig) {
@@ -54,10 +35,7 @@ async function getTokenFixture(multiSig) {
 
 module.exports = {
   getUserManagementFixture,
-  getArbiterManagementFixture,
   getBetManagementFixture,
-  getArbiterFixture,
   getDataCenterFixture,
-  getFactoryFixture,
   getTokenFixture,
 };

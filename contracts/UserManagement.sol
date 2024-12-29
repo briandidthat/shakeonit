@@ -14,11 +14,6 @@ contract UserManagement is Restricted {
     // event to be emitted when a new user is added
     event UserAdded(address indexed user, address indexed userStorage);
 
-    modifier isInitialized() {
-        require(initialized, "Contract not initialized");
-        _;
-    }
-
     constructor(address _multiSig) {
         // grant the default admin role to the multiSig address
         _grantRole(DEFAULT_ADMIN_ROLE, _multiSig);
@@ -26,38 +21,20 @@ contract UserManagement is Restricted {
         _grantRole(MULTISIG_ROLE, _multiSig);
     }
 
-    /**
-     * @dev Initialize the contract with the addresses of the contracts that need to be granted the CONTRACT_ROLE
-     * @param contracts The addresses of the contracts that need to be granted the CONTRACT_ROLE
-     */
-    function initialize(
-        Requestor[] calldata contracts
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        _initializeRoles(contracts);
-        initialized = true;
-    }
-
-    /**
-     * @dev Add a new user
-     * @param _user The address of the user
-     */
-    function register(
-        address _user,
-        Requestor[] calldata contracts
-    ) external isInitialized returns (address) {
-        require(_user != address(0), "Zero address not allowed");
-        require(!isUser[_user], "User already registered");
-        // add the user to the list of users
-        users.push(_user);
+    function register() external returns (address) {
+        require(msg.sender != address(0), "Zero address not allowed");
+        require(!isUser[msg.sender], "User already registered");
         // create a new user storage contract and store the address in the user storage registry
-        UserStorage userStorage = new UserStorage(_user, contracts);
+        UserStorage userStorage = new UserStorage(msg.sender);
         address userStorageAddress = address(userStorage);
-        userStorageRegistry[_user] = userStorageAddress;
+        userStorageRegistry[msg.sender] = userStorageAddress;
         userStorageContracts.push(userStorageAddress);
+        // add the user to the list of users
+        users.push(msg.sender);
         // set isUser to true
-        isUser[_user] = true;
+        isUser[msg.sender] = true;
         // emit UserAdded event
-        emit UserAdded(_user, address(userStorage));
+        emit UserAdded(msg.sender, address(userStorage));
 
         return address(userStorage);
     }

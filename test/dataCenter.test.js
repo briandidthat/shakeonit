@@ -1,14 +1,25 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+const {
+  getUserManagementFixture,
+  getDataCenterFixture,
+  getBetManagementFixture,
+} = require("./utils");
 
 describe("DataCenter", function () {
-  let dataCenter;
+  let dataCenter, userManagement, betManagement;
   let multiSig, newMultiSig, addr1, addr2;
 
   beforeEach(async function () {
     [multiSig, newMultiSig, addr1, addr2] = await ethers.getSigners();
+    userManagement = await getUserManagementFixture(multiSig.address);
+    betManagement = await getBetManagementFixture(multiSig.address);
     // Deploy the DataCenter contract
-    dataCenter = await ethers.deployContract("DataCenter", [multiSig.address]);
+    dataCenter = await getDataCenterFixture(
+      multiSig.address,
+      await userManagement.getAddress(),
+      await betManagement.getAddress()
+    );
   });
 
   it("Should set a new multi-sig wallet", async function () {
@@ -24,50 +35,47 @@ describe("DataCenter", function () {
   });
 
   it("Should get the UserManagement contract address", async function () {
-    expect(await dataCenter.getUserManagement()).to.be.a.properAddress;
-  });
+    address = await dataCenter.getUserManagement();
 
-  it("Should get the ArbiterManagement contract address", async function () {
-    expect(await dataCenter.getArbiterManagement()).to.be.a.properAddress;
+    expect(address).to.be.a.properAddress;
+    expect(address).to.equal(await userManagement.getAddress());
   });
 
   it("Should get the BetManagement contract address", async function () {
     expect(await dataCenter.getBetManagement()).to.be.a.properAddress;
   });
 
-  it("Should get the bet factory address", async function () {
-    expect(await dataCenter.getBetFactory()).to.be.a.properAddress;
-  });
-
   it("Should check if an address is a user", async function () {
     // get the user management address
-    await dataCenter.connect(multiSig).registerUser(addr1.address);
+    await userManagement.connect(addr1).register();
     // check if the address is a user
     const isUser = await dataCenter.isUser(addr1.address);
     expect(isUser).to.be.true;
   });
 
-  it("Should get the user storage address", async function () {
-    // register a user
-    await dataCenter.registerUser(addr1.address);
-    // get the user storage address
-    const userAddress = await dataCenter.getUserStorage(addr1.address);
-    expect(userAddress).to.be.a.properAddress;
+  it("Should check if an address is not a user", async function () {
+    // check if the address is a user
+    const isUser = await dataCenter.isUser(addr1.address);
+    expect(isUser).to.be.false;
   });
 
-  it("Should check if an address is an arbiter", async function () {
-    // create an arbiter
-    await dataCenter.connect(multiSig).registerArbiter(addr1.address);
-    // check if the address is an arbiter
-    const isArbiter = await dataCenter.isArbiter(addr1.address);
-    expect(isArbiter).to.be.true;
+  it("Should set a new UserManagement contract address", async function () {
+    // Deploy a new UserManagement contract
+    let temp = await getUserManagementFixture(multiSig.address);
+    let tempAddr = await temp.getAddress();
+    // Set the new UserManagement contract address
+    await dataCenter.connect(multiSig).setNewUserManagement(tempAddr);
+    // Check if the new UserManagement contract address is set to the new UserManagement contract address
+    expect(await dataCenter.getUserManagement()).to.equal(tempAddr);
   });
 
-  it("Should get the arbiter address", async function () {
-    // register an arbiter
-    await dataCenter.connect(multiSig).registerArbiter(addr1.address);
-    // get the arbiter address
-    const arbiterAddress = await dataCenter.getArbiter(addr1.address);
-    expect(arbiterAddress).to.be.a.properAddress;
+  it("Should set a new BetManagement contract address", async function () {
+    // Deploy a new BetManagement contract
+    let temp = await getBetManagementFixture(multiSig.address);
+    let tempAddr = await temp.getAddress();
+    // Set the new BetManagement contract address
+    await dataCenter.connect(multiSig).setNewBetManagement(tempAddr);
+    // Check if the new BetManagement contract address is set to the new BetManagement contract address
+    expect(await dataCenter.getBetManagement()).to.equal(tempAddr);
   });
 });

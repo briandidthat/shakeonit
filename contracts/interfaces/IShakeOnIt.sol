@@ -12,13 +12,15 @@ interface IShakeOnIt {
 
     struct BetDetails {
         address betContract;
+        address token;
         address initiator;
-        address acceptor;
         address arbiter;
+        address acceptor;
         address winner;
         address loser;
-        address fundToken;
         uint256 amount;
+        uint256 arbiterFee;
+        uint256 platformFee;
         uint256 payout;
         uint256 deadline;
         BetStatus status;
@@ -28,7 +30,7 @@ interface IShakeOnIt {
         address indexed betAddress,
         address indexed initiator,
         address indexed arbiter,
-        address fundToken,
+        address token,
         uint256 amount,
         uint256 deadline
     );
@@ -36,7 +38,7 @@ interface IShakeOnIt {
     event BetAccepted(
         address indexed betAddress,
         address indexed acceptor,
-        address indexed fundToken,
+        address indexed token,
         uint256 amount,
         uint256 deadline
     );
@@ -45,7 +47,7 @@ interface IShakeOnIt {
         address indexed betAddress,
         address indexed winner,
         address indexed arbiter,
-        address fundToken,
+        address token,
         uint256 amount
     );
 
@@ -53,7 +55,7 @@ interface IShakeOnIt {
         address indexed betAddress,
         address indexed winner,
         address indexed arbiter,
-        address fundToken,
+        address token,
         uint256 amount
     );
 
