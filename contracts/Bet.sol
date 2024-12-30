@@ -47,7 +47,6 @@ contract Bet is IShakeOnIt {
         uint256 _arbiterFee,
         uint256 _platformFee,
         uint256 _payout,
-        uint256 _deadline,
         string memory _condition
     ) {
         betManagement = BetManagement(_betManagement);
@@ -66,7 +65,6 @@ contract Bet is IShakeOnIt {
             arbiterFee: _arbiterFee,
             platformFee: _platformFee,
             payout: _payout,
-            deadline: _deadline,
             status: BetStatus.INITIATED
         });
     }
@@ -142,10 +140,6 @@ contract Bet is IShakeOnIt {
             betDetails.status == BetStatus.FUNDED,
             "Bet has not been funded yet"
         ); // ensure the bet is funded
-        require(
-            block.timestamp >= betDetails.deadline,
-            "Deadline has not passed yet"
-        ); // ensure the deadline has passed
 
         // get the multisig wallet address for the platform fee
         address multiSigWallet = DataCenter(_dataCenter).getMultiSig();

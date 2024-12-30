@@ -50,8 +50,8 @@ contract DataCenter is Restricted {
         _grantRole(MULTISIG_ROLE, _newMultiSig);
         _grantRole(DEFAULT_ADMIN_ROLE, _newMultiSig);
         // remove the ownership from the old multi-sig
-        _removeRole(MULTISIG_ROLE, multiSigWallet);
-        _removeRole(DEFAULT_ADMIN_ROLE, multiSigWallet);
+        revokeRole(MULTISIG_ROLE, multiSigWallet);
+        revokeRole(DEFAULT_ADMIN_ROLE, multiSigWallet);
 
         // emit MultiSigChanged event
         emit MultiSigChanged(multiSigWallet, _newMultiSig);

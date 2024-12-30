@@ -22,7 +22,6 @@ interface IShakeOnIt {
         uint256 arbiterFee;
         uint256 platformFee;
         uint256 payout;
-        uint256 deadline;
         BetStatus status;
     }
 
@@ -32,15 +31,14 @@ interface IShakeOnIt {
         address indexed arbiter,
         address token,
         uint256 amount,
-        uint256 deadline
+        string condition
     );
 
     event BetAccepted(
         address indexed betAddress,
         address indexed acceptor,
         address indexed token,
-        uint256 amount,
-        uint256 deadline
+        uint256 amount
     );
 
     event BetWon(

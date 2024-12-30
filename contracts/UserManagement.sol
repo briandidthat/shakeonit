@@ -6,11 +6,16 @@ import "./DataCenter.sol";
 import "./Restricted.sol";
 
 contract UserManagement is Restricted {
-    bool private initialized;
     address[] public users;
     address[] public userStorageContracts;
     mapping(address => bool) public isUser;
-    mapping(address => address) public userStorageRegistry;
+    mapping(address => UserDetails) public userDetailsRegistry;
+
+    struct UserDetails {
+        address owner;
+        address storageAddress;
+    }
+
     // event to be emitted when a new user is added
     event UserAdded(address indexed user, address indexed userStorage);
 
@@ -26,14 +31,19 @@ contract UserManagement is Restricted {
         // create a new user storage contract and store the address in the user storage registry
         UserStorage userStorage = new UserStorage(msg.sender);
         address userStorageAddress = address(userStorage);
-        userStorageRegistry[msg.sender] = userStorageAddress;
+        // add the user storage contract address to the list of user storage contracts
         userStorageContracts.push(userStorageAddress);
         // add the user to the list of users
         users.push(msg.sender);
         // set isUser to true
         isUser[msg.sender] = true;
+        // store the user
+        userDetailsRegistry[msg.sender] = UserDetails({
+            owner: msg.sender,
+            storageAddress: userStorageAddress
+        });
         // emit UserAdded event
-        emit UserAdded(msg.sender, address(userStorage));
+        emit UserAdded(msg.sender, userStorageAddress);
 
         return address(userStorage);
     }
@@ -44,7 +54,7 @@ contract UserManagement is Restricted {
      */
     function getUserStorage(address _user) external view returns (address) {
         require(isUser[_user], "User not registered");
-        return userStorageRegistry[_user];
+        return userDetailsRegistry[_user].storageAddress;
     }
 
     /**

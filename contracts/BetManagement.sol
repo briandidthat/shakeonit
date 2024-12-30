@@ -30,7 +30,6 @@ contract BetManagement is IShakeOnIt, Restricted {
      * @param _arbiterFee The fee to be paid to the arbiter.
      * @param _platformFee The fee to be paid to the platform.
      * @param _payout The payout amount.
-     * @param _deadline The deadline of the bet.
      * @param _condition The condition of the bet.
      * @return The address of the deployed bet contract.
      */
@@ -42,7 +41,6 @@ contract BetManagement is IShakeOnIt, Restricted {
         uint256 _arbiterFee,
         uint256 _platformFee,
         uint256 _payout,
-        uint256 _deadline,
         string memory _condition
     ) external returns (address) {
         require(_amount > 0, "Amount should be greater than 0");
@@ -61,7 +59,6 @@ contract BetManagement is IShakeOnIt, Restricted {
             _arbiterFee,
             _platformFee,
             _payout,
-            _deadline,
             _condition
         );
         address betAddress = address(bet);
@@ -88,7 +85,7 @@ contract BetManagement is IShakeOnIt, Restricted {
             _betDetails.arbiter,
             _betDetails.token,
             _betDetails.amount,
-            _betDetails.deadline
+            _condition
         );
 
         return betAddress;
@@ -107,8 +104,7 @@ contract BetManagement is IShakeOnIt, Restricted {
             _betDetails.betContract,
             _betDetails.acceptor,
             _betDetails.token,
-            _betDetails.amount,
-            _betDetails.deadline
+            _betDetails.amount
         );
     }
 
