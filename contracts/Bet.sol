@@ -4,109 +4,120 @@ pragma solidity ^0.8.0;
 import "./interfaces/IShakeOnIt.sol";
 import "./BetManagement.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "./DataCenter.sol";
+import "./Restricted.sol";
 
 contract Bet is IShakeOnIt {
-    address private initiator;
-    address private acceptor;
-    address private arbiter;
-    address private winner;
-    address private loser;
-    uint256 private amount;
-    uint256 private payout;
-    uint256 private arbiterFee;
-    uint256 private platformFee;
-    uint256 private deadline;
     string private condition;
+    BetDetails private betDetails;
     BetManagement private betManagement;
-    IERC20 private fundToken;
-    BetStatus private status;
+    IERC20 private token;
     mapping(address => uint256) private balances;
 
-    modifier onlyArbiter() {
-        require(msg.sender == arbiter, "Restricted to arbiter");
+    modifier onlyArbiter(address _arbiter) {
+        require(_arbiter == betDetails.arbiter, "Restricted to arbiter");
         _;
     }
 
-    modifier onlyWinner() {
-        require(msg.sender == winner, "Restricted to winner");
+    modifier onlyWinner(address _winner) {
+        require(_winner == betDetails.winner, "Restricted to winner");
+        _;
+    }
+
+    modifier isParticipant(address _participant1, address _participant2) {
+        require(
+            _participant1 == betDetails.initiator ||
+                _participant1 == betDetails.acceptor,
+            "Restricted to participant"
+        );
+        require(
+            _participant2 == betDetails.initiator ||
+                _participant2 == betDetails.acceptor,
+            "Restricted to participant"
+        );
         _;
     }
 
     constructor(
         address _betManagement,
-        address _fundToken,
+        address _token,
         address _initiator,
         address _arbiter,
         uint256 _amount,
         uint256 _arbiterFee,
         uint256 _platformFee,
         uint256 _payout,
-        uint256 _deadline,
         string memory _condition
     ) {
         betManagement = BetManagement(_betManagement);
-        fundToken = IERC20(_fundToken);
-        initiator = _initiator;
-        arbiter = _arbiter;
-        amount = _amount;
-        arbiterFee = _arbiterFee;
-        platformFee = _platformFee;
-        payout = _payout;
-        deadline = _deadline;
+        token = IERC20(_token);
         condition = _condition;
-        status = BetStatus.INITIATED;
+        // set the bet details
+        betDetails = BetDetails({
+            betContract: address(this),
+            token: _token,
+            initiator: _initiator,
+            arbiter: _arbiter,
+            acceptor: address(0),
+            winner: address(0),
+            loser: address(0),
+            amount: _amount,
+            arbiterFee: _arbiterFee,
+            platformFee: _platformFee,
+            payout: _payout,
+            status: BetStatus.INITIATED
+        });
     }
 
     /**
      * @notice Accepts the bet and funds the escrow.
      */
-    function acceptBet() external {
+    function acceptBet(address _acceptor) external {
         require(
-            status == BetStatus.INITIATED,
+            betDetails.status == BetStatus.INITIATED,
             "Bet must be in initiated status"
         );
-        // get the user storage address and perform the token transfer
-        address userStorageAddress = betManagement.getUserStorage(msg.sender);
-        require(userStorageAddress != address(0), "User has not registered");
         require(
-            balances[userStorageAddress] == 0,
+            balances[_acceptor] == 0,
             "Participant has already funded the escrow"
         );
         require(
-            fundToken.transferFrom(userStorageAddress, address(this), amount),
+            token.transferFrom(_acceptor, address(this), betDetails.amount),
             "Token transfer failed"
         );
 
-        // update the balance of the acceptor and contract state
-        acceptor = userStorageAddress;
-        balances[userStorageAddress] = amount;
-        status = BetStatus.FUNDED;
+        // update the bet details
+        betDetails.acceptor = _acceptor;
+        betDetails.status = BetStatus.FUNDED;
+        // update the balance of the acceptor
+        balances[_acceptor] = betDetails.amount;
+        balances[betDetails.arbiter] = betDetails.arbiterFee;
         // report the acceptance to the bet management contract
-        betManagement.acceptBet(msg.sender);
+        betManagement.acceptBet(betDetails);
     }
 
     /**
      * @notice Cancels the bet and refunds the initiator.
      * @dev This function can only be called by the initiator.
      */
-    function cancelBet() external {
-        address userStorageAddress = betManagement.getUserStorage(msg.sender);
-        require(userStorageAddress == initiator, "Restricted to initiator");
+    function cancelBet(address _initiator) external {
+        require(_initiator == betDetails.initiator, "Restricted to initiator");
         require(
-            status == BetStatus.INITIATED,
+            betDetails.status == BetStatus.INITIATED,
             "Bet must be in initiated status"
         );
-        require(acceptor == address(0), "Bet has been already been accepted");
         require(
-            fundToken.transfer(userStorageAddress, amount),
+            token.transfer(_initiator, betDetails.amount),
             "Token transfer failed"
         );
 
         // update the balance of the initiator
-        balances[initiator] = 0;
-        status = BetStatus.CANCELLED;
+        balances[betDetails.initiator] = 0;
+        betDetails.status = BetStatus.CANCELLED;
+        betDetails.winner = address(0);
+        betDetails.loser = address(0);
         // report the cancellation to the data center
-        betManagement.cancelBet(initiator);
+        betManagement.cancelBet(betDetails);
     }
 
     /**
@@ -115,117 +126,118 @@ contract Bet is IShakeOnIt {
      * @param _winner The address of the participant who is declared the winner.
      */
     function declareWinner(
+        address _dataCenter,
+        address _arbiter,
         address _winner,
         address _loser
-    ) external onlyArbiter {
-        require(_winner == initiator || _winner == acceptor, "Invalid winner"); // ensure the winner is a participant
-        require(_loser == initiator || _loser == acceptor, "Invalid winner"); // ensure the loser is a participant
-        require(status == BetStatus.FUNDED, "Bet has not been funded yet"); // ensure the bet is funded
-        require(block.timestamp >= deadline, "Deadline has not passed yet"); // ensure the deadline has passed
+    )
+        external
+        onlyArbiter(_arbiter)
+        isParticipant(_winner, _loser)
+        returns (uint256)
+    {
+        require(
+            betDetails.status == BetStatus.FUNDED,
+            "Bet has not been funded yet"
+        ); // ensure the bet is funded
+
+        // get the multisig wallet address for the platform fee
+        address multiSigWallet = DataCenter(_dataCenter).getMultiSig();
+
+        // transfer the platform fee to the multisig wallet
+        require(
+            token.transfer(multiSigWallet, betDetails.platformFee),
+            "Token transfer failed"
+        );
 
         // update the winner and loser
-        winner = _winner;
-        loser = _loser;
+        betDetails.winner = _winner;
+        betDetails.loser = _loser;
         // update the status of the bet
-        status = BetStatus.WON;
+        betDetails.status = BetStatus.WON;
         require(
-            fundToken.transfer(arbiter, arbiterFee),
+            token.transfer(betDetails.arbiter, betDetails.arbiterFee),
             "Token transfer to arbiter failed"
         );
         // update the balance of the arbiter
-        balances[msg.sender] = 0;
-        // get the multisig wallet address for the platform fee
-        address multiSigWallet = betManagement.getMultiSig();
-        // transfer the platform fee to the multisig wallet
-        require(
-            fundToken.transfer(multiSigWallet, platformFee),
-            "Token transfer failed"
-        );
+        balances[betDetails.arbiter] = 0;
+
+        // update the bet details
+        betDetails.winner = _winner;
+        betDetails.loser = _loser;
+        betDetails.status = BetStatus.WON;
         // report the winner to the bet management contract
-        betManagement.declareWinner(
-            address(this),
-            arbiter,
-            _winner,
-            _loser,
-            platformFee
-        );
+        betManagement.declareWinner(betDetails);
+        return betDetails.arbiterFee;
     }
 
-    function withdrawEarnings() external onlyWinner {
-        require(status == BetStatus.WON, "Bet has not been declared won yet");
-        // get the user storage address
-        address userStorageAddress = betManagement.getUserStorage(msg.sender);
-        require(userStorageAddress == winner, "Restricted to winner");
-        require(balances[userStorageAddress] > 0, "No funds to withdraw");
+    function withdrawEarnings(address _winner) external onlyWinner(_winner) {
+        require(
+            betDetails.status == BetStatus.WON,
+            "Bet has not been declared won yet"
+        );
+        require(balances[_winner] > 0, "No funds to withdraw");
         // transfer the funds to the winner
         require(
-            fundToken.transfer(userStorageAddress, payout),
+            token.transfer(_winner, betDetails.payout),
             "Token transfer failed"
         );
         // update the balance of the participant
-        balances[userStorageAddress] = 0;
+        balances[_winner] = 0;
         // update the status of the bet
-        status = BetStatus.SETTLED;
+        betDetails.status = BetStatus.SETTLED;
     }
 
-    function getBetDetails()
-        external
-        view
-        returns (BetDetails memory betDetails)
-    {
-        betDetails = BetDetails({
-            betContract: address(this),
-            initiator: initiator,
-            acceptor: acceptor,
-            arbiter: arbiter,
-            winner: winner,
-            loser: loser,
-            fundToken: address(fundToken),
-            amount: amount,
-            payout: payout,
-            deadline: deadline,
-            status: status
-        });
+    function getBetDetails() external view returns (BetDetails memory) {
+        return betDetails;
     }
 
     function getArbiter() external view returns (address) {
-        return arbiter;
+        return betDetails.arbiter;
     }
 
     function getInitiator() external view returns (address) {
-        return initiator;
+        return betDetails.initiator;
     }
 
     function getAcceptor() external view returns (address) {
-        return acceptor;
+        return betDetails.acceptor;
     }
 
     function getWinner() external view returns (address) {
-        return winner;
+        require(
+            betDetails.status != BetStatus.INITIATED,
+            "Bet has not been declared yet"
+        );
+        return betDetails.winner;
     }
 
     function getLoser() external view returns (address) {
-        return loser;
+        require(
+            betDetails.status != BetStatus.INITIATED,
+            "Bet has not been declared yet"
+        );
+        return betDetails.loser;
     }
 
     function getAmount() external view returns (uint256) {
-        return amount;
+        return betDetails.amount;
     }
 
     function getStatus() external view returns (BetStatus) {
-        return status;
+        return betDetails.status;
     }
 
-    function getFundToken() external view returns (address) {
-        return address(fundToken);
+    function getToken() external view returns (address) {
+        return betDetails.token;
     }
 
     function getArbiterFee() external view returns (uint256) {
-        return arbiterFee;
+        return betDetails.arbiterFee;
     }
 
     function getPlatformFee() external view returns (uint256) {
-        return platformFee;
+        return betDetails.platformFee;
     }
 
     function getCondition() external view returns (string memory) {
