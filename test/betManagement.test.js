@@ -54,7 +54,7 @@ describe("BetManagement", function () {
       .connect(addr1)
       .grantApproval(tokenAddress, betManagementAddress, 1000);
     // deploy the bet
-    let bet = await betManagement
+    await betManagement
       .connect(addr1)
       .deployBet(
         tokenAddress,

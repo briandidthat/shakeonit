@@ -24,7 +24,6 @@ async function getDataCenterFixture(multiSig, userManagement, betManagement) {
 }
 
 async function getTokenFixture(multiSig) {
-  // deploy TestToken
   const token = await ethers.deployContract(
     "MockERC20",
     ["TestToken", "TTK", 1000000],
@@ -37,6 +36,8 @@ async function getTokenFixture(multiSig) {
 function getEventObject(target, events) {
   let event = null;
   events.map((element) => {
+    // in the event of LOG object, no fragment is present.
+    // for shakeonit events, fragment is present and will have a name property
     if (element.fragment) {
       if (element.fragment.name === target) {
         event = element;

@@ -86,6 +86,8 @@ describe("Bet", function () {
     expect(await bet.getArbiter()).to.be.equal(arbiter);
     expect(await bet.getStake()).to.be.equal(1000);
     expect(await bet.getPayout()).to.be.equal(1900);
+    expect(await bet.getPlatformFee()).to.be.equal(50);
+    expect(await bet.getArbiterFee()).to.be.equal(50);
     expect(await bet.getCondition()).to.be.equal("Condition");
   });
 });
