@@ -1,50 +1,94 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "./UserStorage.sol";
-import "./Arbiter.sol";
 import "./BetManagement.sol";
 import "./UserManagement.sol";
-import "./ArbiterManagement.sol";
-import "./BetFactory.sol";
+import "./Restricted.sol";
 
-contract DataCenter is Ownable {
+contract DataCenter is Restricted {
     address private multiSigWallet;
-    BetFactory private betFactory;
-    UserManagement private userManagement;
-    ArbiterManagement private arbiterManagement;
-    BetManagement private betManagement;
+    address private userManagement;
+    address private betManagement;
 
     event MultiSigChanged(
         address indexed oldMultiSig,
         address indexed newMultiSig
     );
+    event UserManagementChanged(
+        address indexed oldUserManagement,
+        address indexed newUserManagement
+    );
+    event BetManagementChanged(
+        address indexed oldBetManagement,
+        address indexed newBetManagement
+    );
 
-    constructor(address _multiSigWallet) Ownable(_multiSigWallet) {
+    constructor(
+        address _multiSigWallet,
+        address _userManagement,
+        address _betManagement
+    ) {
+        // set the multi-sig wallet as the owner
+        _grantRole(DEFAULT_ADMIN_ROLE, _multiSigWallet);
+        _grantRole(MULTISIG_ROLE, _multiSigWallet);
+
         multiSigWallet = _multiSigWallet;
-        // create pointer to the bet factory contract
-        betFactory = new BetFactory(multiSigWallet, address(this));
-        // deploy new user management contract
-        userManagement = new UserManagement(multiSigWallet, address(this));
-        // create pointer to the arbiter management contract
-        arbiterManagement = new ArbiterManagement(
-            _multiSigWallet,
-            address(this)
-        );
-        // create pointer to the bet management contract
-        betManagement = new BetManagement(multiSigWallet, address(this));
+        userManagement = _userManagement;
+        betManagement = _betManagement;
     }
 
-    function setNewMultiSig(address _newMultiSig) external onlyOwner {
+    function setNewMultiSig(
+        address _newMultiSig
+    ) external onlyRole(MULTISIG_ROLE) {
         require(_newMultiSig != address(0), "Zero address not allowed");
-        require(_newMultiSig != owner(), "Owner cannot be the new multi-sig");
+        require(
+            _newMultiSig != multiSigWallet,
+            "Owner cannot be the new multi-sig"
+        );
         // transfer ownership to the new multi-sig
-        _transferOwnership(_newMultiSig);
+        _grantRole(MULTISIG_ROLE, _newMultiSig);
+        _grantRole(DEFAULT_ADMIN_ROLE, _newMultiSig);
+        // remove the ownership from the old multi-sig
+        revokeRole(MULTISIG_ROLE, multiSigWallet);
+        revokeRole(DEFAULT_ADMIN_ROLE, multiSigWallet);
+
+        // emit MultiSigChanged event
+        emit MultiSigChanged(multiSigWallet, _newMultiSig);
         // update the multi-sig address
         multiSigWallet = _newMultiSig;
-        // emit MultiSigChanged event
-        emit MultiSigChanged(_newMultiSig, multiSigWallet);
+    }
+
+    function setNewUserManagement(
+        address _newUserManagement
+    ) external onlyRole(MULTISIG_ROLE) {
+        require(_newUserManagement != address(0), "Zero address not allowed");
+        require(
+            _newUserManagement != address(userManagement),
+            "UserManagement address is the same"
+        );
+        // emit UserManagementChanged event
+        emit UserManagementChanged(userManagement, _newUserManagement);
+        // update the userManagement address
+        userManagement = _newUserManagement;
+    }
+
+    function setNewBetManagement(
+        address _newBetManagement
+    ) external onlyRole(MULTISIG_ROLE) {
+        require(_newBetManagement != address(0), "Zero address not allowed");
+        require(
+            _newBetManagement != betManagement,
+            "BetManagement address is the same"
+        );
+        // emit BetManagementChanged event
+        emit BetManagementChanged(_newBetManagement, betManagement);
+        // update the betManagement address
+        betManagement = _newBetManagement;
+    }
+
+    function isUser(address _user) external view returns (bool) {
+        return UserManagement(userManagement).isUser(_user);
     }
 
     function getMultiSig() external view returns (address) {
@@ -52,50 +96,10 @@ contract DataCenter is Ownable {
     }
 
     function getUserManagement() external view returns (address) {
-        return address(userManagement);
-    }
-
-    function getArbiterManagement() external view returns (address) {
-        return address(arbiterManagement);
+        return userManagement;
     }
 
     function getBetManagement() external view returns (address) {
-        return address(betManagement);
-    }
-
-    function getBetFactory() external view returns (address) {
-        return address(betFactory);
-    }
-
-    function getUserStorage(address _user) external view returns (address) {
-        return userManagement.getUserStorage(_user);
-    }
-
-    function getArbiter(address _arbiter) external view returns (address) {
-        return arbiterManagement.getArbiter(_arbiter);
-    }
-
-    function isArbiter(address _arbiter) external view returns (bool) {
-        return arbiterManagement.isRegistered(_arbiter);
-    }
-
-    function isUser(address _user) external view returns (bool) {
-        return userManagement.isUser(_user);
-    }
-
-    /**
-     * @dev Register a new user
-     * @param _user The address of the user
-     */
-    function registerUser(address _user) external {
-        userManagement.addUser(_user);
-    }
-
-    /**
-     * @dev Register a new arbiter
-     * @param _arbiter The address of the arbiter
-     */
-    function registerArbiter(address _arbiter) external onlyOwner {
-        arbiterManagement.addArbiter(_arbiter);
+        return betManagement;
     }
 }

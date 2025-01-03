@@ -1,52 +1,49 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "./UserStorage.sol";
 import "./DataCenter.sol";
+import "./Restricted.sol";
 
-contract UserManagement is Ownable {
-    DataCenter private dataCenter;
+contract UserManagement is Restricted {
     address[] public users;
     address[] public userStorageContracts;
     mapping(address => bool) public isUser;
-    mapping(address => address) public userStorageRegistry;
+    mapping(address => UserDetails) public userDetailsRegistry;
+
+    struct UserDetails {
+        address owner;
+        address storageAddress;
+    }
+
     // event to be emitted when a new user is added
     event UserAdded(address indexed user, address indexed userStorage);
 
-    modifier onlyDataCenter() {
-        require(
-            msg.sender == address(dataCenter),
-            "Only data center can call this function"
-        );
-        _;
+    constructor(address _multiSig) {
+        // grant the default admin role to the multiSig address
+        _grantRole(DEFAULT_ADMIN_ROLE, _multiSig);
+        // set the owner role to the multiSig address
+        _grantRole(MULTISIG_ROLE, _multiSig);
     }
 
-    constructor(
-        address _multiSigWallet,
-        address _dataCenter
-    ) Ownable(_multiSigWallet) {
-        dataCenter = DataCenter(_dataCenter);
-    }
-
-    /**
-     * @dev Add a new user
-     * @param _user The address of the user
-     */
-    function addUser(address _user) external onlyDataCenter returns (address) {
-        require(_user != address(0), "Zero address not allowed");
-        require(!isUser[_user], "User already registered");
-        // add the user to the list of users
-        users.push(_user);
+    function register(address _betManagement) external returns (address) {
+        require(!isUser[msg.sender], "User already registered");
         // create a new user storage contract and store the address in the user storage registry
-        UserStorage userStorage = new UserStorage(_user, address(dataCenter));
+        UserStorage userStorage = new UserStorage(msg.sender, _betManagement);
         address userStorageAddress = address(userStorage);
-        userStorageRegistry[_user] = userStorageAddress;
+        // add the user storage contract address to the list of user storage contracts
         userStorageContracts.push(userStorageAddress);
+        // add the user to the list of users
+        users.push(msg.sender);
         // set isUser to true
-        isUser[_user] = true;
+        isUser[msg.sender] = true;
+        // store the user
+        userDetailsRegistry[msg.sender] = UserDetails({
+            owner: msg.sender,
+            storageAddress: userStorageAddress
+        });
         // emit UserAdded event
-        emit UserAdded(_user, address(userStorage));
+        emit UserAdded(msg.sender, userStorageAddress);
 
         return address(userStorage);
     }
@@ -57,7 +54,7 @@ contract UserManagement is Ownable {
      */
     function getUserStorage(address _user) external view returns (address) {
         require(isUser[_user], "User not registered");
-        return userStorageRegistry[_user];
+        return userDetailsRegistry[_user].storageAddress;
     }
 
     /**
@@ -65,6 +62,10 @@ contract UserManagement is Ownable {
      */
     function getUsers() external view returns (address[] memory) {
         return users;
+    }
+
+    function getUserCount() external view returns (uint256) {
+        return users.length;
     }
 
     /**

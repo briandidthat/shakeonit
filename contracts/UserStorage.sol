@@ -2,22 +2,33 @@
 pragma solidity ^0.8.0;
 
 import "./interfaces/IShakeOnIt.sol";
-import "@openzeppelin/contracts/proxy/Clones.sol";
+import "./Restricted.sol";
+import "./Bet.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "./DataCenter.sol";
 
-contract UserStorage is IShakeOnIt, Ownable {
-    address private dataCenter;
-    uint256 private victories;
+contract UserStorage is IShakeOnIt {
+    uint256 private wins;
     uint256 private losses;
-    uint256 private pnl;
-    address[] private bets;
-    mapping(address => BetDetails) public betDetailsRegistry;
+    address private owner;
+    address private betManagement;
+    address[] public deployedBets;
+    mapping(address => bool) isBet;
     mapping(address => uint256) public balances;
+    mapping(address => BetDetails) public betDetails;
 
-    constructor(address _owner, address _dataCenter) Ownable(_owner) {
-        dataCenter = _dataCenter;
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Restricted to owner");
+        _;
+    }
+
+    modifier onlyBetManagement() {
+        require(msg.sender == betManagement, "Restricted to bet management");
+        _;
+    }
+
+    constructor(address _owner, address _betManagement) {
+        owner = _owner;
+        betManagement = _betManagement;
     }
 
     /**
@@ -47,66 +58,6 @@ contract UserStorage is IShakeOnIt, Ownable {
     }
 
     /**
-     * @dev store a bet contract
-     * @param _betDetails BetDetails struct
-     */
-    function saveBet(BetDetails memory _betDetails) external {
-        address betManagement = DataCenter(dataCenter).getBetManagement();
-        require(msg.sender == betManagement, "Restricted to betManagement");
-
-        BetDetails storage bet = betDetailsRegistry[_betDetails.betContract];
-        // if bet is not already stored, add it to the list
-        if (bet.betContract == address(0)) {
-            bets.push(_betDetails.betContract);
-        }
-        // store the bet details
-        betDetailsRegistry[_betDetails.betContract] = _betDetails;
-    }
-
-    /**
-     * @dev Record a victory
-     * @param _betDetails BetDetails struct
-     */
-    function recordVictory(BetDetails memory _betDetails) external {
-        // increment the victories
-        victories++;
-        // update the pnl
-        pnl += _betDetails.payout;
-        // store the updated bet details
-        betDetailsRegistry[_betDetails.betContract] = _betDetails;
-    }
-
-    /**
-     * @dev Record a loss
-     * @param _betDetails BetDetails struct
-     */
-    function recordLoss(BetDetails memory _betDetails) external {
-        // get the bet details from storage and increment the losses
-        losses++;
-        // update the pnl
-        pnl -= _betDetails.amount;
-        // store the updated bet details
-        betDetailsRegistry[_betDetails.betContract] = _betDetails;
-    }
-
-    /**
-     * @dev Cancel a bet
-     * @param _betContract address of the bet contract
-     */
-    function cancelBet(address _betContract) external {
-        // remove the bet from the active bets
-        for (uint256 i = 0; i < bets.length; i++) {
-            if (bets[i] == _betContract) {
-                bets[i] = bets[bets.length - 1];
-                bets.pop();
-                break;
-            }
-        }
-        // delete the bet
-        delete betDetailsRegistry[_betContract];
-    }
-
-    /**
      * @dev Grant approval to a spender
      * @param _token address of the token
      * @param _spender address of the spender
@@ -123,34 +74,40 @@ contract UserStorage is IShakeOnIt, Ownable {
     }
 
     /**
-     * @dev Get a bet
-     * @param _betContract address of the bet contract
-     * @return BetDetails struct
+     * @notice Saves or updates bet details in storage
+     * @dev Only callable by addresses with BET_CONTRACT_ROLE
+     * @param _betDetails The bet details struct containing bet information to be saved
+     * @custom:events None
+     * @custom:requirements
+     * - Caller must have BET_CONTRACT_ROLE
+     * @custom:modifies
+     * - deployedBets array if bet contract not previously registered
+     * - wins/losses counters if bet status is WON
+     * - betDetails mapping for the given bet contract address
      */
+    function saveBet(BetDetails memory _betDetails) external onlyBetManagement {
+        if (!isBet[_betDetails.betContract]) {
+            isBet[_betDetails.betContract] = true;
+            deployedBets.push(_betDetails.betContract);
+        }
+        if (_betDetails.status == BetStatus.WON) {
+            if (_betDetails.winner == address(this)) {
+                wins++;
+            } else {
+                losses++;
+            }
+        }
+        betDetails[_betDetails.betContract] = _betDetails;
+    }
+
+    function getAllBets() external view returns (address[] memory) {
+        return deployedBets;
+    }
+
     function getBetDetails(
         address _betContract
     ) external view returns (BetDetails memory) {
-        return betDetailsRegistry[_betContract];
-    }
-
-    /**
-     * @dev Get all the bets
-     * @return BetDetails[] array of bets
-     */
-    function getBets() external view returns (BetDetails[] memory) {
-        BetDetails[] memory _bets = new BetDetails[](bets.length);
-        for (uint256 i = 0; i < bets.length; i++) {
-            _bets[i] = betDetailsRegistry[bets[i]];
-        }
-        return _bets;
-    }
-
-    /**
-     * @dev Get the number of bets
-     * @return uint256 number of bets
-     */
-    function getBetCount() external view returns (uint256) {
-        return bets.length;
+        return betDetails[_betContract];
     }
 
     /**
@@ -159,5 +116,9 @@ contract UserStorage is IShakeOnIt, Ownable {
      */
     function getTokenBalance(address _token) external view returns (uint256) {
         return balances[_token];
+    }
+
+    function getOwner() external view returns (address) {
+        return owner;
     }
 }
