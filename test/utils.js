@@ -33,7 +33,21 @@ async function getTokenFixture(multiSig) {
   return token;
 }
 
+// Helper function to get event object from event name
+function getEventObject(target, events) {
+  let event = null;
+  events.map((element) => {
+    if (element.fragment) {
+      if (element.fragment.name === target) {
+        event = element;
+      }
+    }
+  });
+  return event;
+}
+
 module.exports = {
+  getEventObject,
   getUserManagementFixture,
   getBetManagementFixture,
   getDataCenterFixture,

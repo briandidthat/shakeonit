@@ -46,8 +46,8 @@ describe("DataCenter", function () {
   });
 
   it("Should check if an address is a user", async function () {
-    // get the user management address
-    await userManagement.connect(addr1).register();
+    // get the user management address (using addr2 in place of betManagement for testing)
+    await userManagement.connect(addr1).register(addr2.address);
     // check if the address is a user
     const isUser = await dataCenter.isUser(addr1.address);
     expect(isUser).to.be.true;

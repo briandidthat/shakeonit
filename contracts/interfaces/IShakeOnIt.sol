@@ -10,6 +10,11 @@ interface IShakeOnIt {
         CANCELLED
     }
 
+    struct UserDetails {
+        address owner;
+        address storageAddress;
+    }
+
     struct BetDetails {
         address betContract;
         address token;
@@ -18,44 +23,10 @@ interface IShakeOnIt {
         address acceptor;
         address winner;
         address loser;
-        uint256 amount;
+        uint256 stake;
         uint256 arbiterFee;
         uint256 platformFee;
         uint256 payout;
         BetStatus status;
     }
-
-    event BetCreated(
-        address indexed betAddress,
-        address indexed initiator,
-        address indexed arbiter,
-        address token,
-        uint256 amount,
-        string condition
-    );
-
-    event BetAccepted(
-        address indexed betAddress,
-        address indexed acceptor,
-        address indexed token,
-        uint256 amount
-    );
-
-    event BetWon(
-        address indexed betAddress,
-        address indexed winner,
-        address indexed arbiter,
-        address token,
-        uint256 amount
-    );
-
-    event BetSettled(
-        address indexed betAddress,
-        address indexed winner,
-        address indexed arbiter,
-        address token,
-        uint256 amount
-    );
-
-    event BetCancelled(address indexed betAddress, address indexed initiator);
 }
