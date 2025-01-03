@@ -1,19 +1,20 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { getUserManagementFixture, getTokenFixture } = require("./utils");
+const { getUserManagementFixture, getTokenFixture, getBetManagementFixture } = require("./utils");
 const {
   abi,
 } = require("../artifacts/contracts/UserStorage.sol/UserStorage.json");
 
 describe("UserStorage", function () {
-  let userManagement, userStorage, token;
+  let userManagement, userStorage, token, betManagement;
   let multiSig, addr1, addr2, tokenAddress, userStorageAddress;
 
   beforeEach(async function () {
     [multiSig, addr1, addr2] = await ethers.getSigners();
     userManagement = await getUserManagementFixture(multiSig.address);
+    betManagement = await getBetManagementFixture(multiSig.address);
     // Register addr1
-    await userManagement.connect(addr1).register();
+    await userManagement.connect(addr1).register(await betManagement.getAddress());
     // get user strorage address
     userStorageAddress = await userManagement.getUserStorage(addr1.address);
     userStorage = await ethers.getContractAt(abi, userStorageAddress);

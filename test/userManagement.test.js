@@ -1,15 +1,17 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { getUserManagementFixture } = require("./utils");
+const { getUserManagementFixture, getBetManagementFixture } = require("./utils");
 
 describe("UserManagement", function () {
-  let userManagement;
-  let multiSigWallet, user;
+  let userManagement, betManagement;
+  let multiSigWallet, user, betManagementAddress;
   beforeEach(async function () {
     [multiSigWallet, user] = await ethers.getSigners();
     userManagement = await getUserManagementFixture(multiSigWallet.address);
+    betManagement = await getBetManagementFixture(multiSigWallet.address);
+    betManagementAddress = await betManagement.getAddress();
     // register user for testing
-    await userManagement.connect(user).register();
+    await userManagement.connect(user).register(betManagementAddress);
   });
 
   it("Should deploy the UserManagement contract", async function () {
@@ -17,7 +19,7 @@ describe("UserManagement", function () {
   });
 
   it("Should revert when trying to register an already registered user", async function () {
-    await expect(userManagement.connect(user).register()).to.be.revertedWith(
+    await expect(userManagement.connect(user).register(betManagementAddress)).to.be.revertedWith(
       "User already registered"
     );
   });

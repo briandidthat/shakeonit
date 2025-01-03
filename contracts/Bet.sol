@@ -5,7 +5,6 @@ import "./interfaces/IShakeOnIt.sol";
 import "./BetManagement.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./DataCenter.sol";
-import "./Restricted.sol";
 
 contract Bet is IShakeOnIt {
     string private condition;
@@ -19,8 +18,8 @@ contract Bet is IShakeOnIt {
         _;
     }
 
-    modifier onlyWinner(address _winner) {
-        require(_winner == betDetails.winner, "Restricted to winner");
+    modifier onlyWinner() {
+        require(msg.sender == betDetails.winner, "Restricted to winner");
         _;
     }
 
@@ -43,7 +42,7 @@ contract Bet is IShakeOnIt {
         address _token,
         address _initiator,
         address _arbiter,
-        uint256 _amount,
+        uint256 _stake,
         uint256 _arbiterFee,
         uint256 _platformFee,
         uint256 _payout,
@@ -61,7 +60,7 @@ contract Bet is IShakeOnIt {
             acceptor: address(0),
             winner: address(0),
             loser: address(0),
-            amount: _amount,
+            stake: _stake,
             arbiterFee: _arbiterFee,
             platformFee: _platformFee,
             payout: _payout,
@@ -82,7 +81,7 @@ contract Bet is IShakeOnIt {
             "Participant has already funded the escrow"
         );
         require(
-            token.transferFrom(_acceptor, address(this), betDetails.amount),
+            token.transferFrom(_acceptor, address(this), betDetails.stake),
             "Token transfer failed"
         );
 
@@ -90,10 +89,10 @@ contract Bet is IShakeOnIt {
         betDetails.acceptor = _acceptor;
         betDetails.status = BetStatus.FUNDED;
         // update the balance of the acceptor
-        balances[_acceptor] = betDetails.amount;
+        balances[_acceptor] = betDetails.stake;
         balances[betDetails.arbiter] = betDetails.arbiterFee;
         // report the acceptance to the bet management contract
-        betManagement.acceptBet(betDetails);
+        betManagement.reportAcceptance(betDetails);
     }
 
     /**
@@ -107,7 +106,7 @@ contract Bet is IShakeOnIt {
             "Bet must be in initiated status"
         );
         require(
-            token.transfer(_initiator, betDetails.amount),
+            token.transfer(_initiator, betDetails.stake),
             "Token transfer failed"
         );
 
@@ -117,7 +116,7 @@ contract Bet is IShakeOnIt {
         betDetails.winner = address(0);
         betDetails.loser = address(0);
         // report the cancellation to the data center
-        betManagement.cancelBet(betDetails);
+        betManagement.reportCancellation(betDetails);
     }
 
     /**
@@ -167,11 +166,11 @@ contract Bet is IShakeOnIt {
         betDetails.loser = _loser;
         betDetails.status = BetStatus.WON;
         // report the winner to the bet management contract
-        betManagement.declareWinner(betDetails);
+        betManagement.reportWinnerDeclared(betDetails);
         return betDetails.arbiterFee;
     }
 
-    function withdrawEarnings(address _winner) external onlyWinner(_winner) {
+    function withdrawEarnings(address _winner) external onlyWinner {
         require(
             betDetails.status == BetStatus.WON,
             "Bet has not been declared won yet"
@@ -186,6 +185,12 @@ contract Bet is IShakeOnIt {
         balances[_winner] = 0;
         // update the status of the bet
         betDetails.status = BetStatus.SETTLED;
+        // report the settlement to the bet management contract
+        betManagement.reportBetSettled(betDetails);
+    }
+
+    function getPayout() external view returns (uint256) {
+        return betDetails.payout;
     }
 
     function getBetDetails() external view returns (BetDetails memory) {
@@ -212,6 +217,10 @@ contract Bet is IShakeOnIt {
         return betDetails.winner;
     }
 
+    function getStake() external view returns (uint256) {
+        return betDetails.stake;
+    }
+
     function getLoser() external view returns (address) {
         require(
             betDetails.status != BetStatus.INITIATED,
@@ -221,7 +230,7 @@ contract Bet is IShakeOnIt {
     }
 
     function getAmount() external view returns (uint256) {
-        return betDetails.amount;
+        return betDetails.stake;
     }
 
     function getStatus() external view returns (BetStatus) {
