@@ -7,7 +7,6 @@ import "./interfaces/IShakeOnIt.sol";
 abstract contract Restricted is AccessControl {
     bytes32 public constant MULTISIG_ROLE = keccak256("MULTISIG_ROLE");
     bytes32 public constant USER_ROLE = keccak256("USER_ROLE");
-    bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
     bytes32 public constant ARBITER_ROLE = keccak256("ARBITER_ROLE");
     bytes32 public constant BET_CONTRACT_ROLE = keccak256("BET_CONTRACT_ROLE");
 }

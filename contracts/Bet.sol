@@ -65,6 +65,13 @@ contract Bet is IShakeOnIt {
      * @notice Accepts the bet and funds the escrow.
      */
     function acceptBet(UserDetails memory _acceptor) external {
+        // validate the acceptor is not the initiator or arbiter
+        require(
+            msg.sender != initiator.owner,
+            "Initiator cannot accept the bet"
+        );
+        require(msg.sender != arbiter.owner, "Arbiter cannot accept the bet");
+        // validate the status of the bet
         require(
             status == BetStatus.INITIATED,
             "Bet must be in initiated status"

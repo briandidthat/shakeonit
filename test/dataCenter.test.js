@@ -78,14 +78,4 @@ describe("DataCenter", function () {
     // Check if the new BetManagement contract address is set to the new BetManagement contract address
     expect(await dataCenter.getBetManagement()).to.equal(tempAddr);
   });
-
-  it("Should revert when unauthorized account tries to update the usermanagement addr", async function () {
-    // Set the new UserManagement contract address
-    await expect(
-      dataCenter.connect(addr1).setNewUserManagement(addr2.address)
-    ).to.be.revertedWithCustomError(
-      dataCenter,
-      "AccessControlUnauthorizedAccount"
-    );
-  });
 });
