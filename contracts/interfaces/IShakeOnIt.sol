@@ -18,9 +18,9 @@ interface IShakeOnIt {
     struct BetDetails {
         address betContract;
         address token;
-        address initiator;
-        address arbiter;
-        address acceptor;
+        UserDetails initiator;
+        UserDetails arbiter;
+        UserDetails acceptor;
         address winner;
         address loser;
         uint256 stake;

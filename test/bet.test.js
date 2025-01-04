@@ -12,13 +12,15 @@ const {
 const { abi: betAbi } = require("../artifacts/contracts/Bet.sol/Bet.json");
 
 describe("Bet", function () {
+  let initiatorDetails, acceptorDetails, arbiterDetails;
   let betManagement, userManagement, bet, token;
   let multiSig,
     betManagementAddress,
     tokenAddress,
     initiator,
     acceptor,
-    arbiter;
+    arbiter,
+    betAddress;
   beforeEach(async function () {
     [multiSig, addr1, addr2, addr3] = await ethers.getSigners();
 
@@ -36,13 +38,26 @@ describe("Bet", function () {
     acceptor = await userManagement.getUserStorage(addr2.address);
     arbiter = await userManagement.getUserStorage(addr3.address);
 
+    initiatorDetails = {
+      owner: addr1.address,
+      storageAddress: initiator,
+    };
+    acceptorDetails = {
+      owner: addr2.address,
+      storageAddress: acceptor,
+    };
+    arbiterDetails = {
+      owner: addr3.address,
+      storageAddress: arbiter,
+    };
+
     // deploy TestToken
     token = await getTokenFixture(multiSig);
     tokenAddress = await token.getAddress();
     // send 10000 tokens to initiator
-    await token.connect(multiSig).transfer(initiator, 10000);
+    await token.connect(multiSig).transfer(initiator, 1000);
     // send 10000 tokens to acceptor
-    await token.connect(multiSig).transfer(acceptor, 10000);
+    await token.connect(multiSig).transfer(acceptor, 1000);
 
     // get the initiator's user storage contract (addr1)
     let initiatorContract = await ethers.getContractAt(
@@ -54,15 +69,15 @@ describe("Bet", function () {
     // grant approval rights to the betManagement contract
     await initiatorContract
       .connect(addr1)
-      .grantApproval(tokenAddress, betManagementAddress, 1000);
+      .grantApproval(tokenAddress, betManagementAddress, 100000);
     await acceptorContract
       .connect(addr2)
-      .grantApproval(tokenAddress, betManagementAddress, 1000);
+      .grantApproval(tokenAddress, betManagementAddress, 100000);
     // deploy the bet
     let tx = await betManagement.connect(addr1).deployBet(
       tokenAddress,
-      initiator,
-      arbiter,
+      initiatorDetails,
+      arbiterDetails,
       1000, // stake
       50, // .05% fee for arbiter
       50, // .05% fee for platform
@@ -72,16 +87,18 @@ describe("Bet", function () {
     let receipt = await tx.wait();
     const event = getEventObject("BetCreated", receipt.logs);
     // the first argument of the event is the bet address
-    const betAddress = event.args[0];
+    betAddress = event.args[0];
     // assign pointer to bet address
     bet = await ethers.getContractAt(betAbi, betAddress);
   });
 
   it("Should have deployed a bet", async function () {
+    // assert
     expect(await betManagement.getBetCount()).to.be.equal(1);
   });
 
   it("Should have the correct bet details", async function () {
+    // assert
     expect(await bet.getInitiator()).to.be.equal(initiator);
     expect(await bet.getArbiter()).to.be.equal(arbiter);
     expect(await bet.getStake()).to.be.equal(1000);
@@ -89,5 +106,67 @@ describe("Bet", function () {
     expect(await bet.getPlatformFee()).to.be.equal(50);
     expect(await bet.getArbiterFee()).to.be.equal(50);
     expect(await bet.getCondition()).to.be.equal("Condition");
+  });
+
+  it("Should allow the acceptor to accept the bet", async function () {
+    // accept the bet
+    await bet.connect(addr2).acceptBet(acceptorDetails);
+    // assert
+    expect(await token.balanceOf(betAddress)).to.be.equal(2000);
+  });
+
+  it("Should allow the arbiter to resolve the bet", async function () {
+    // accept the bet
+    await bet.connect(addr2).acceptBet(acceptorDetails);
+    // declare the winner
+    await bet.connect(addr3).declareWinner(acceptorDetails, initiatorDetails);
+    // assert
+    expect(await bet.getStatus()).to.be.equal(2);
+    expect(await bet.getWinner()).to.be.equal(acceptorDetails.owner);
+    expect(await bet.getLoser()).to.be.equal(initiatorDetails.owner);
+    expect(await token.balanceOf(betAddress)).to.be.equal(1900);
+  });
+
+  it("Should allow the winner to withdraw the winnings", async function () {
+    // accept the bet
+    await bet.connect(addr2).acceptBet(acceptorDetails);
+    // declare the winner
+    await bet.connect(addr3).declareWinner(acceptorDetails, initiatorDetails);
+    // withdraw the winnings
+    await bet.connect(addr2).withdrawEarnings();
+    // assert
+    expect(await bet.getStatus()).to.be.equal(3);
+    expect(await token.balanceOf(acceptor)).to.be.equal(1900);
+    expect(await token.balanceOf(arbiter)).to.be.equal(50);
+    expect(await token.balanceOf(betAddress)).to.be.equal(0);
+  });
+
+  it("Should allow the initiator to cancel the bet", async function () {
+    // cancel the bet
+    await bet.connect(addr1).cancelBet();
+    // assert
+    expect(await bet.getStatus()).to.be.equal(4);
+    expect(await token.balanceOf(betAddress)).to.be.equal(0);
+    expect(await token.balanceOf(initiator)).to.be.equal(1000);
+  });
+
+  it("Should revert if the initiator tries to declare the winner", async function () {
+    // accept the bet
+    await bet.connect(addr2).acceptBet(acceptorDetails);
+    // declare the winner
+    await expect(
+      bet.connect(addr1).declareWinner(acceptorDetails, arbiterDetails)
+    ).to.be.revertedWith("Restricted to arbiter");
+  });
+
+  it("Should revert if loser tries to withdraw winnings", async function () {
+    // accept the bet
+    await bet.connect(addr2).acceptBet(acceptorDetails);
+    // declare the winner
+    await bet.connect(addr3).declareWinner(acceptorDetails, initiatorDetails);
+    // withdraw the winnings
+    await expect(bet.connect(addr1).withdrawEarnings()).to.be.revertedWith(
+      "Restricted to winner"
+    );
   });
 });
