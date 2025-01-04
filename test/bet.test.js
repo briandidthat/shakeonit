@@ -68,6 +68,8 @@ describe("Bet", function () {
     initiatorContract = await ethers.getContractAt(userStorageAbi, initiator);
     // get the acceptor's user storage contract (addr2)
     acceptorContract = await ethers.getContractAt(userStorageAbi, acceptor);
+    // get the arbiter's user storage contract (addr3)
+    arbiterContract = await ethers.getContractAt(userStorageAbi, arbiter);
     // grant approval rights to the betManagement contract
     await initiatorContract
       .connect(addr1)
@@ -108,8 +110,9 @@ describe("Bet", function () {
     expect(await bet.getPlatformFee()).to.be.equal(50);
     expect(await bet.getArbiterFee()).to.be.equal(50);
     expect(await bet.getCondition()).to.be.equal("Condition");
-    // assert the bet was added to the initiator's list of bets
+    // assert the bet was added to the user storage contracts
     expect(await initiatorContract.getAllBets()).to.be.lengthOf(1);
+    expect(await arbiterContract.getAllBets()).to.be.lengthOf(1);
   });
 
   it("Should allow the acceptor to accept the bet", async function () {
@@ -120,7 +123,7 @@ describe("Bet", function () {
     expect(await acceptorContract.getAllBets()).to.be.lengthOf(1);
   });
 
-  it("Should allow the arbiter to resolve the bet", async function () {
+  it("Should allow the arbiter to declare the winner", async function () {
     // accept the bet
     await bet.connect(addr2).acceptBet(acceptorDetails);
     // declare the winner
