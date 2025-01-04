@@ -11,6 +11,7 @@ const {
 } = require("../artifacts/contracts/UserStorage.sol/UserStorage.json");
 
 describe("BetManagement", function () {
+  let initiatorDetails, acceptorDetails, arbiterDetails;
   let betManagement, userManagement, token;
   let multiSig,
     initiator,
@@ -35,6 +36,19 @@ describe("BetManagement", function () {
     acceptor = await userManagement.getUserStorage(addr2.address);
     arbiter = await userManagement.getUserStorage(addr3.address);
 
+    initiatorDetails = {
+      owner: addr1.address,
+      storageAddress: initiator,
+    };
+    acceptorDetails = {
+      owner: addr2.address,
+      storageAddress: acceptor,
+    };
+    arbiterDetails = {
+      owner: addr3.address,
+      storageAddress: arbiter,
+    };
+
     // deploy TestToken
     token = await getTokenFixture(multiSig);
     tokenAddress = await token.getAddress();
@@ -58,8 +72,8 @@ describe("BetManagement", function () {
       .connect(addr1)
       .deployBet(
         tokenAddress,
-        initiator,
-        arbiter,
+        initiatorDetails,
+        arbiterDetails,
         1000,
         50,
         50,
