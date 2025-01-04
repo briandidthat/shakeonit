@@ -13,7 +13,12 @@ const { abi: betAbi } = require("../artifacts/contracts/Bet.sol/Bet.json");
 
 describe("Bet", function () {
   let initiatorDetails, acceptorDetails, arbiterDetails;
-  let betManagement, userManagement, bet, token;
+  let betManagement,
+    userManagement,
+    bet,
+    token,
+    acceptorContract,
+    initiatorContract;
   let multiSig,
     betManagementAddress,
     tokenAddress,
@@ -60,12 +65,9 @@ describe("Bet", function () {
     await token.connect(multiSig).transfer(acceptor, 1000);
 
     // get the initiator's user storage contract (addr1)
-    let initiatorContract = await ethers.getContractAt(
-      userStorageAbi,
-      initiator
-    );
+    initiatorContract = await ethers.getContractAt(userStorageAbi, initiator);
     // get the acceptor's user storage contract (addr2)
-    let acceptorContract = await ethers.getContractAt(userStorageAbi, acceptor);
+    acceptorContract = await ethers.getContractAt(userStorageAbi, acceptor);
     // grant approval rights to the betManagement contract
     await initiatorContract
       .connect(addr1)
@@ -106,6 +108,8 @@ describe("Bet", function () {
     expect(await bet.getPlatformFee()).to.be.equal(50);
     expect(await bet.getArbiterFee()).to.be.equal(50);
     expect(await bet.getCondition()).to.be.equal("Condition");
+    // assert the bet was added to the initiator's list of bets
+    expect(await initiatorContract.getAllBets()).to.be.lengthOf(1);
   });
 
   it("Should allow the acceptor to accept the bet", async function () {
@@ -113,6 +117,7 @@ describe("Bet", function () {
     await bet.connect(addr2).acceptBet(acceptorDetails);
     // assert
     expect(await token.balanceOf(betAddress)).to.be.equal(2000);
+    expect(await acceptorContract.getAllBets()).to.be.lengthOf(1);
   });
 
   it("Should allow the arbiter to resolve the bet", async function () {
@@ -168,5 +173,73 @@ describe("Bet", function () {
     await expect(bet.connect(addr1).withdrawEarnings()).to.be.revertedWith(
       "Restricted to winner"
     );
+  });
+
+  it("Should revert if the arbiter tries to withdraw earnings", async function () {
+    // accept the bet
+    await bet.connect(addr2).acceptBet(acceptorDetails);
+    // declare the winner
+    await bet.connect(addr3).declareWinner(acceptorDetails, initiatorDetails);
+    // withdraw the winnings
+    await expect(bet.connect(addr3).withdrawEarnings()).to.be.revertedWith(
+      "Restricted to winner"
+    );
+  });
+
+  it("Should revert if the multiSig tries to withdraw earnings", async function () {
+    // accept the bet
+    await bet.connect(addr2).acceptBet(acceptorDetails);
+    // declare the winner
+    await bet.connect(addr3).declareWinner(acceptorDetails, initiatorDetails);
+    // withdraw the winnings
+    await expect(bet.connect(multiSig).withdrawEarnings()).to.be.revertedWith(
+      "Restricted to winner"
+    );
+  });
+
+  it("Should revert if the arbiter tries to accept the bet", async function () {
+    // accept the bet
+    await expect(
+      bet.connect(addr3).acceptBet(arbiterDetails)
+    ).to.be.revertedWith("Arbiter cannot accept the bet");
+  });
+
+  it("Should revert if the acceptor tries to accept the bet again", async function () {
+    // accept the bet
+    await bet.connect(addr2).acceptBet(acceptorDetails);
+    // accept the bet again
+    await expect(
+      bet.connect(addr2).acceptBet(acceptorDetails)
+    ).to.be.revertedWith("Bet must be in initiated status");
+  });
+
+  it("Should revert if the arbiter tries to cancel the bet", async function () {
+    // cancel the bet
+    await expect(bet.connect(addr3).cancelBet()).to.be.revertedWith(
+      "Restricted to initiator"
+    );
+  });
+
+  it("Should revert if the acceptor tries to cancel the bet", async function () {
+    // accept the bet
+    await bet.connect(addr2).acceptBet(acceptorDetails);
+    // cancel the bet
+    await expect(bet.connect(addr2).cancelBet()).to.be.revertedWith(
+      "Restricted to initiator"
+    );
+  });
+
+  it("Should revert if the multiSig tries to cancel the bet", async function () {
+    // cancel the bet
+    await expect(bet.connect(multiSig).cancelBet()).to.be.revertedWith(
+      "Restricted to initiator"
+    );
+  });
+
+  it("Should revert if the arbiter tries to declare a winner without the bet being accepted", async function () {
+    // declare the winner
+    await expect(
+      bet.connect(addr3).declareWinner(acceptorDetails, initiatorDetails)
+    ).to.be.revertedWith("Bet has not been funded yet");
   });
 });

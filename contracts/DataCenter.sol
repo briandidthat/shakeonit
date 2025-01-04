@@ -4,9 +4,9 @@ pragma solidity ^0.8.0;
 import "./UserStorage.sol";
 import "./BetManagement.sol";
 import "./UserManagement.sol";
-import "./Restricted.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract DataCenter is Restricted {
+contract DataCenter is Ownable {
     address private multiSigWallet;
     address private userManagement;
     address private betManagement;
@@ -28,40 +28,27 @@ contract DataCenter is Restricted {
         address _multiSigWallet,
         address _userManagement,
         address _betManagement
-    ) {
-        // set the multi-sig wallet as the owner
-        _grantRole(DEFAULT_ADMIN_ROLE, _multiSigWallet);
-        _grantRole(MULTISIG_ROLE, _multiSigWallet);
-
+    ) Ownable(_multiSigWallet) {
         multiSigWallet = _multiSigWallet;
         userManagement = _userManagement;
         betManagement = _betManagement;
     }
 
-    function setNewMultiSig(
-        address _newMultiSig
-    ) external onlyRole(MULTISIG_ROLE) {
+    function setNewMultiSig(address _newMultiSig) external onlyOwner {
         require(_newMultiSig != address(0), "Zero address not allowed");
-        require(
-            _newMultiSig != multiSigWallet,
-            "Owner cannot be the new multi-sig"
-        );
-        // transfer ownership to the new multi-sig
-        _grantRole(MULTISIG_ROLE, _newMultiSig);
-        _grantRole(DEFAULT_ADMIN_ROLE, _newMultiSig);
-        // remove the ownership from the old multi-sig
-        revokeRole(MULTISIG_ROLE, multiSigWallet);
-        revokeRole(DEFAULT_ADMIN_ROLE, multiSigWallet);
+        require(_newMultiSig != owner(), "Owner cannot be the new multi-sig");
 
+        // transfer ownership to the new multi-sig
+        _transferOwnership(_newMultiSig);
         // emit MultiSigChanged event
         emit MultiSigChanged(multiSigWallet, _newMultiSig);
-        // update the multi-sig address
+        // update the multiSigWallet address
         multiSigWallet = _newMultiSig;
     }
 
     function setNewUserManagement(
         address _newUserManagement
-    ) external onlyRole(MULTISIG_ROLE) {
+    ) external onlyOwner {
         require(_newUserManagement != address(0), "Zero address not allowed");
         require(
             _newUserManagement != address(userManagement),
@@ -73,9 +60,7 @@ contract DataCenter is Restricted {
         userManagement = _newUserManagement;
     }
 
-    function setNewBetManagement(
-        address _newBetManagement
-    ) external onlyRole(MULTISIG_ROLE) {
+    function setNewBetManagement(address _newBetManagement) external onlyOwner {
         require(_newBetManagement != address(0), "Zero address not allowed");
         require(
             _newBetManagement != betManagement,
