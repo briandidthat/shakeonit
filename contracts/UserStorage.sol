@@ -74,6 +74,19 @@ contract UserStorage is IShakeOnIt {
     }
 
     /**
+     * @dev Revoke approval to a spender
+     * @param _token address of the token
+     * @param _spender address of the spender
+     */
+    function revokeApproval(
+        address _token,
+        address _spender
+    ) external onlyOwner {
+        // set the approval to 0
+        IERC20(_token).approve(_spender, 0);
+    }
+
+    /**
      * @notice Saves or updates bet details in storage
      * @dev Only callable by addresses with BET_CONTRACT_ROLE
      * @param _betDetails The bet details struct containing bet information to be saved
