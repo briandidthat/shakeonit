@@ -55,28 +55,33 @@ contract BetManagement is IShakeOnIt, Restricted {
     }
 
     /**
-     * @notice Deploys a new bet contract.
-     * @param _token The address of the token to be used for the bet.
-     * @param _initiator The address of the initiator of the bet.
-     * @param _arbiter The address of the arbiter of the bet.
-     * @param _amount The stake of the bet.
-     * @param _arbiterFee The fee to be paid to the arbiter.
-     * @param _platformFee The fee to be paid to the platform.
-     * @param _payout The payout stake.
-     * @param _condition The condition of the bet.
-     * @return The address of the deployed bet contract.
+     * @notice Deploys a new bet contract and initializes it with the given parameters
+     * @dev Transfers the stake from initiator to the new bet contract and updates related states
+     * @param _token Address of the ERC20 token to be used for the bet
+     * @param _initiator Struct containing initiator's address including their storage address
+     * @param _arbiter Struct containing arbiter's address including their storage address
+     * @param _stake Amount of tokens to be staked in the bet
+     * @param _arbiterFee Fee to be paid to the arbiter
+     * @param _platformFee Fee to be paid to the platform
+     * @param _payout Total payout amount for the bet (stake * 2 - (arbiterFee + platformFee))
+     * @param _condition String describing the conditions of the bet
+     * @return address The address of the newly deployed bet contract
+     * @custom:throws "Amount should be greater than 0" if stake is 0
+     * @custom:throws "Zero address not allowed" if initiator or arbiter address is zero
+     * @custom:throws "Token transfer failed" if the token transfer fails
+     * @custom:emits BetCreated event with bet details
      */
     function deployBet(
         address _token,
         UserDetails memory _initiator,
         UserDetails memory _arbiter,
-        uint256 _amount,
+        uint256 _stake,
         uint256 _arbiterFee,
         uint256 _platformFee,
         uint256 _payout,
         string memory _condition
     ) external returns (address) {
-        require(_amount > 0, "Amount should be greater than 0");
+        require(_stake > 0, "Amount should be greater than 0");
         require(
             _initiator.storageAddress != address(0) &&
                 _arbiter.storageAddress != address(0),
@@ -88,40 +93,39 @@ contract BetManagement is IShakeOnIt, Restricted {
             _token,
             _initiator,
             _arbiter,
-            _amount,
+            _stake,
             _arbiterFee,
             _platformFee,
             _payout,
             _condition
         );
         address betAddress = address(bet);
-        BetDetails memory _betDetails = bet.getBetDetails();
 
         // transfer the stake to the bet contract
         require(
             IERC20(_token).transferFrom(
                 _initiator.storageAddress,
                 betAddress,
-                _amount
+                _stake
             ),
             "Token transfer failed"
         );
 
         // update the state
-        deployedBets.push(betAddress);
         isBet[betAddress] = true;
+        deployedBets.push(betAddress);
         // grant the bet contract the BET_CONTRACT_ROLE
         _grantRole(BET_CONTRACT_ROLE, betAddress);
         // save the bet in the initiator's and arbiter's storage
-        UserStorage(_initiator.storageAddress).saveBet(_betDetails);
-        UserStorage(_arbiter.storageAddress).saveBet(_betDetails);
+        UserStorage(_initiator.storageAddress).saveBet(betAddress);
+        UserStorage(_arbiter.storageAddress).saveBet(betAddress);
         // emit BetCreated event
         emit BetCreated(
-            _betDetails.betContract,
-            _betDetails.initiator.storageAddress,
-            _betDetails.arbiter.storageAddress,
-            _betDetails.token,
-            _betDetails.stake,
+            betAddress,
+            _initiator.storageAddress,
+            _arbiter.storageAddress,
+            _token,
+            _stake,
             _condition
         );
 
@@ -131,28 +135,33 @@ contract BetManagement is IShakeOnIt, Restricted {
     /**
      * @notice Accepts the bet and funds the escrow.
      */
-    function acceptBet(
-        BetDetails memory _betDetails
-    ) external onlyRole(BET_CONTRACT_ROLE) returns (bool) {
+    function acceptBet() external onlyRole(BET_CONTRACT_ROLE) returns (bool) {
+        BetDetails memory betDetails = Bet(msg.sender).getBetDetails();
         // fund the bet contract
         require(
-            IERC20(_betDetails.token).transferFrom(
-                _betDetails.acceptor.storageAddress,
-                _betDetails.betContract,
-                _betDetails.stake
+            IERC20(betDetails.token).transferFrom(
+                betDetails.acceptor.storageAddress,
+                betDetails.betContract,
+                betDetails.stake
             ),
             "Token transfer failed"
         );
         // update the bet for all parties
-        UserStorage(_betDetails.initiator.storageAddress).saveBet(_betDetails);
-        UserStorage(_betDetails.acceptor.storageAddress).saveBet(_betDetails);
-        UserStorage(_betDetails.arbiter.storageAddress).saveBet(_betDetails);
+        UserStorage(betDetails.initiator.storageAddress).saveBet(
+            betDetails.betContract
+        );
+        UserStorage(betDetails.acceptor.storageAddress).saveBet(
+            betDetails.betContract
+        );
+        UserStorage(betDetails.arbiter.storageAddress).saveBet(
+            betDetails.betContract
+        );
         // emit BetAccepted event
         emit BetAccepted(
-            _betDetails.betContract,
-            _betDetails.acceptor.storageAddress,
-            _betDetails.token,
-            _betDetails.stake
+            betDetails.betContract,
+            betDetails.acceptor.storageAddress,
+            betDetails.token,
+            betDetails.stake
         );
         return true;
     }
@@ -160,55 +169,52 @@ contract BetManagement is IShakeOnIt, Restricted {
     /**
      * @notice Declares the winner of the bet and transfers the funds to the winner.
      */
-    function reportWinnerDeclared(
-        BetDetails memory _betDetails
-    ) external onlyRole(BET_CONTRACT_ROLE) {
-        // update the bet for all parties
-        UserStorage(_betDetails.initiator.storageAddress).saveBet(_betDetails);
-        UserStorage(_betDetails.acceptor.storageAddress).saveBet(_betDetails);
-        UserStorage(_betDetails.arbiter.storageAddress).saveBet(_betDetails);
+    function reportWinnerDeclared() external onlyRole(BET_CONTRACT_ROLE) {
+        BetDetails memory betDetails = Bet(msg.sender).getBetDetails();
+        // update the bet for all parties (msg.sender will be the contract address)
+        UserStorage(betDetails.initiator.storageAddress).saveBet(msg.sender);
+        UserStorage(betDetails.acceptor.storageAddress).saveBet(msg.sender);
+        UserStorage(betDetails.arbiter.storageAddress).saveBet(msg.sender);
         // emit BetWon event
         emit BetWon(
-            _betDetails.betContract,
-            _betDetails.winner,
-            _betDetails.arbiter.storageAddress,
-            _betDetails.token,
-            _betDetails.stake
+            betDetails.betContract,
+            betDetails.winner,
+            betDetails.arbiter.storageAddress,
+            betDetails.token,
+            betDetails.stake
         );
     }
 
-    function reportBetSettled(
-        BetDetails memory _betDetails
-    ) external onlyRole(BET_CONTRACT_ROLE) {
-        // update the bet for all parties
-        UserStorage(_betDetails.initiator.storageAddress).saveBet(_betDetails);
-        UserStorage(_betDetails.acceptor.storageAddress).saveBet(_betDetails);
-        UserStorage(_betDetails.arbiter.storageAddress).saveBet(_betDetails);
+    function reportBetSettled() external onlyRole(BET_CONTRACT_ROLE) {
+        BetDetails memory betDetails = Bet(msg.sender).getBetDetails();
+        // update the bet for all parties (msg.sender will be the contract address)
+        UserStorage(betDetails.initiator.storageAddress).saveBet(msg.sender);
+        UserStorage(betDetails.acceptor.storageAddress).saveBet(msg.sender);
+        UserStorage(betDetails.arbiter.storageAddress).saveBet(msg.sender);
         // remove the BET_CONTRACT_ROLE from the bet contract
-        _revokeRole(BET_CONTRACT_ROLE, _betDetails.betContract);
+        _revokeRole(BET_CONTRACT_ROLE, msg.sender);
         // emit BetSettled event
         emit BetSettled(
-            _betDetails.betContract,
-            _betDetails.winner,
-            _betDetails.loser,
-            _betDetails.token,
-            _betDetails.stake
+            msg.sender,
+            betDetails.winner,
+            betDetails.loser,
+            betDetails.token,
+            betDetails.stake
         );
     }
 
     /**
      * @notice Cancels the bet and updates the state.
      */
-    function reportCancellation(
-        BetDetails memory _betDetails
-    ) external onlyRole(BET_CONTRACT_ROLE) {
+    function reportCancellation() external onlyRole(BET_CONTRACT_ROLE) {
+        BetDetails memory betDetails = Bet(msg.sender).getBetDetails();
         // update the bet for initiator and arbiter (acceptor is not updated atp)
-        UserStorage(_betDetails.initiator.storageAddress).saveBet(_betDetails);
-        UserStorage(_betDetails.arbiter.storageAddress).saveBet(_betDetails);
+        UserStorage(betDetails.initiator.storageAddress).saveBet(msg.sender);
+        UserStorage(betDetails.arbiter.storageAddress).saveBet(msg.sender);
         // remove the BET_CONTRACT_ROLE from the bet contract
-        _revokeRole(BET_CONTRACT_ROLE, _betDetails.betContract);
+        _revokeRole(BET_CONTRACT_ROLE, msg.sender);
         // emit BetCancelled event
-        emit BetCancelled(msg.sender, _betDetails.betContract);
+        emit BetCancelled(msg.sender, betDetails.initiator.storageAddress);
     }
 
     function getMultiSig() external view returns (address) {
