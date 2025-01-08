@@ -65,6 +65,13 @@ contract Bet is IShakeOnIt {
      * @notice Accepts the bet and funds the escrow.
      */
     function acceptBet(UserDetails memory _acceptor) external {
+        // validate the acceptor is not the initiator or arbiter
+        require(
+            msg.sender != initiator.owner,
+            "Initiator cannot accept the bet"
+        );
+        require(msg.sender != arbiter.owner, "Arbiter cannot accept the bet");
+        // validate the status of the bet
         require(
             status == BetStatus.INITIATED,
             "Bet must be in initiated status"
@@ -76,14 +83,13 @@ contract Bet is IShakeOnIt {
 
         // update the acceptor
         acceptor = _acceptor;
-        // recieve the stake from the acceptor
-        BetDetails memory betDetails = _buildBetDetails();
-        require(betManagement.acceptBet(betDetails), "Bet acceptance failed");
         // update the status of the bet
         status = BetStatus.FUNDED;
         // update the balance of the acceptor
         balances[_acceptor.storageAddress] = stake;
         balances[arbiter.storageAddress] = arbiterFee;
+        // recieve the stake from the acceptor
+        require(betManagement.acceptBet(), "Bet acceptance failed");
     }
 
     /**
@@ -104,8 +110,7 @@ contract Bet is IShakeOnIt {
         balances[initiator.storageAddress] = 0;
         status = BetStatus.CANCELLED;
         // report the cancellation to the data center
-        BetDetails memory betDetails = _buildBetDetails();
-        betManagement.reportCancellation(betDetails);
+        betManagement.reportCancellation();
     }
 
     /**
@@ -153,8 +158,7 @@ contract Bet is IShakeOnIt {
         // update the status of the bet
         status = BetStatus.WON;
         // report the winner to the bet management contract
-        BetDetails memory betDetails = _buildBetDetails();
-        betManagement.reportWinnerDeclared(betDetails);
+        betManagement.reportWinnerDeclared();
     }
 
     function withdrawEarnings() external onlyWinner {
@@ -170,8 +174,7 @@ contract Bet is IShakeOnIt {
         // update the status of the bet
         status = BetStatus.SETTLED;
         // report the settlement to the bet management contract
-        BetDetails memory betDetails = _buildBetDetails();
-        betManagement.reportBetSettled(betDetails);
+        betManagement.reportBetSettled();
     }
 
     // Internal functions
@@ -198,10 +201,6 @@ contract Bet is IShakeOnIt {
 
     function getPayout() external view returns (uint256) {
         return payout;
-    }
-
-    function getBetDetails() external view returns (BetDetails memory) {
-        return _buildBetDetails();
     }
 
     function getArbiter() external view returns (address) {
@@ -252,5 +251,23 @@ contract Bet is IShakeOnIt {
 
     function getCondition() external view returns (string memory) {
         return condition;
+    }
+
+    function getBetDetails() external view returns (BetDetails memory) {
+        BetDetails memory betDetails = BetDetails({
+            betContract: address(this),
+            token: address(token),
+            initiator: initiator,
+            arbiter: arbiter,
+            acceptor: acceptor,
+            winner: winner.storageAddress,
+            loser: loser.storageAddress,
+            stake: stake,
+            arbiterFee: arbiterFee,
+            platformFee: platformFee,
+            payout: payout,
+            status: status
+        });
+        return betDetails;
     }
 }
