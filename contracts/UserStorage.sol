@@ -14,7 +14,7 @@ contract UserStorage is IShakeOnIt {
     address[] public deployedBets;
     mapping(address => bool) isBet;
     mapping(address => uint256) public balances;
-    mapping(address => BetDetails) public betDetails;
+    mapping(address => BetDetails) public betDetailsRegistry;
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Restricted to owner");
@@ -87,30 +87,24 @@ contract UserStorage is IShakeOnIt {
     }
 
     /**
-     * @notice Saves or updates bet details in storage
-     * @dev Only callable by addresses with BET_CONTRACT_ROLE
-     * @param _betDetails The bet details struct containing bet information to be saved
-     * @custom:events None
-     * @custom:requirements
-     * - Caller must have BET_CONTRACT_ROLE
-     * @custom:modifies
-     * - deployedBets array if bet contract not previously registered
-     * - wins/losses counters if bet status is WON
-     * - betDetails mapping for the given bet contract address
+     * @dev Save the bet details
+     * @param _betContract address of the bet contract
      */
-    function saveBet(BetDetails memory _betDetails) external onlyBetManagement {
-        if (!isBet[_betDetails.betContract]) {
-            isBet[_betDetails.betContract] = true;
-            deployedBets.push(_betDetails.betContract);
+    function saveBet(address _betContract) external onlyBetManagement {
+        BetDetails memory betDetails = Bet(_betContract).getBetDetails();
+
+        if (!isBet[_betContract]) {
+            isBet[_betContract] = true;
+            deployedBets.push(_betContract);
         }
-        if (_betDetails.status == BetStatus.WON) {
-            if (_betDetails.winner == address(this)) {
+        if (betDetails.status == BetStatus.WON) {
+            if (betDetails.winner == address(this)) {
                 wins++;
             } else {
                 losses++;
             }
         }
-        betDetails[_betDetails.betContract] = _betDetails;
+        betDetailsRegistry[_betContract] = betDetails;
     }
 
     function getAllBets() external view returns (address[] memory) {
@@ -120,7 +114,7 @@ contract UserStorage is IShakeOnIt {
     function getBetDetails(
         address _betContract
     ) external view returns (BetDetails memory) {
-        return betDetails[_betContract];
+        return betDetailsRegistry[_betContract];
     }
 
     /**
