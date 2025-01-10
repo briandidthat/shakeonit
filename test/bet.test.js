@@ -35,9 +35,9 @@ describe("Bet", function () {
     betManagementAddress = await betManagement.getAddress();
 
     // register users
-    await userManagement.connect(addr1).register(betManagementAddress);
-    await userManagement.connect(addr2).register(betManagementAddress);
-    await userManagement.connect(addr3).register(betManagementAddress);
+    await userManagement.connect(addr1).register("initiator", betManagementAddress);
+    await userManagement.connect(addr2).register("acceptor", betManagementAddress);
+    await userManagement.connect(addr3).register("arbiter", betManagementAddress);
     // get user storage addresses
     initiator = await userManagement.getUserStorage(addr1.address);
     acceptor = await userManagement.getUserStorage(addr2.address);

@@ -9,4 +9,12 @@ abstract contract Restricted is AccessControl {
     bytes32 public constant USER_ROLE = keccak256("USER_ROLE");
     bytes32 public constant ARBITER_ROLE = keccak256("ARBITER_ROLE");
     bytes32 public constant BET_CONTRACT_ROLE = keccak256("BET_CONTRACT_ROLE");
+
+    modifier hasCorrectRole(bytes32 role) {
+        require(
+            hasRole(role, msg.sender),
+            "Restricted: caller is missing the required role"
+        );
+        _;
+    }
 }
