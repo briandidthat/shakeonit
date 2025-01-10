@@ -7,6 +7,7 @@ import "./Bet.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract UserStorage is IShakeOnIt {
+    string private username;
     uint256 private wins;
     uint256 private losses;
     address private owner;
@@ -26,7 +27,12 @@ contract UserStorage is IShakeOnIt {
         _;
     }
 
-    constructor(address _owner, address _betManagement) {
+    constructor(
+        string memory _username,
+        address _owner,
+        address _betManagement
+    ) {
+        username = _username;
         owner = _owner;
         betManagement = _betManagement;
     }
@@ -87,24 +93,29 @@ contract UserStorage is IShakeOnIt {
     }
 
     /**
-     * @dev Save the bet details
-     * @param _betContract address of the bet contract
+     * @notice Saves or updates bet details in storage
+     * @dev Can only be called by addresses with BET_MANAGEMENT_ROLE
+     * @param _betDetails Struct containing all bet information including contract address, status, and winner
+     * @custom:throws Reverts if caller doesn't have BET_MANAGEMENT_ROLE
+     * @custom:updates isBet mapping - marks bet contract address as valid
+     * @custom:updates deployedBets array - adds new bet contract addresses
+     * @custom:updates wins/losses counters based on bet outcome
+     * @custom:updates betDetailsRegistry mapping with latest bet details
      */
-    function saveBet(address _betContract) external onlyBetManagement {
-        BetDetails memory betDetails = Bet(_betContract).getBetDetails();
-
-        if (!isBet[_betContract]) {
-            isBet[_betContract] = true;
-            deployedBets.push(_betContract);
+    function saveBet(BetDetails memory _betDetails) external onlyBetManagement {
+        address betContract = _betDetails.betContract;
+        if (!isBet[betContract]) {
+            isBet[betContract] = true;
+            deployedBets.push(betContract);
         }
-        if (betDetails.status == BetStatus.WON) {
-            if (betDetails.winner == address(this)) {
+        if (_betDetails.status == BetStatus.WON) {
+            if (_betDetails.winner == address(this)) {
                 wins++;
             } else {
                 losses++;
             }
         }
-        betDetailsRegistry[_betContract] = betDetails;
+        betDetailsRegistry[betContract] = _betDetails;
     }
 
     function getAllBets() external view returns (address[] memory) {
@@ -127,5 +138,9 @@ contract UserStorage is IShakeOnIt {
 
     function getOwner() external view returns (address) {
         return owner;
+    }
+
+    function getUsername() external view returns (string memory) {
+        return username;
     }
 }

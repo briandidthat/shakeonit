@@ -26,10 +26,17 @@ contract UserManagement is Restricted {
         _grantRole(MULTISIG_ROLE, _multiSig);
     }
 
-    function register(address _betManagement) external returns (address) {
+    function register(
+        string memory _username,
+        address _betManagement
+    ) external returns (address) {
         require(!isUser[msg.sender], "User already registered");
         // create a new user storage contract and store the address in the user storage registry
-        UserStorage userStorage = new UserStorage(msg.sender, _betManagement);
+        UserStorage userStorage = new UserStorage(
+            _username,
+            msg.sender,
+            _betManagement
+        );
         address userStorageAddress = address(userStorage);
         // add the user storage contract address to the list of user storage contracts
         userStorageContracts.push(userStorageAddress);

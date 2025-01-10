@@ -1,6 +1,10 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { getUserManagementFixture, getTokenFixture, getBetManagementFixture } = require("./utils");
+const {
+  getUserManagementFixture,
+  getTokenFixture,
+  getBetManagementFixture,
+} = require("./utils");
 const {
   abi,
 } = require("../artifacts/contracts/UserStorage.sol/UserStorage.json");
@@ -13,8 +17,11 @@ describe("UserStorage", function () {
     [multiSig, addr1, addr2] = await ethers.getSigners();
     userManagement = await getUserManagementFixture(multiSig.address);
     betManagement = await getBetManagementFixture(multiSig.address);
+    const betManagementAddress = await betManagement.getAddress();
     // Register addr1
-    await userManagement.connect(addr1).register(await betManagement.getAddress());
+    await userManagement
+      .connect(addr1)
+      .register("tester", betManagementAddress);
     // get user strorage address
     userStorageAddress = await userManagement.getUserStorage(addr1.address);
     userStorage = await ethers.getContractAt(abi, userStorageAddress);
@@ -55,9 +62,13 @@ describe("UserStorage", function () {
 
   it("Should grant approval to bet management address", async function () {
     // grant approval to bet management
-    await userStorage.connect(addr1).grantApproval(tokenAddress, addr2.address, 1000);
+    await userStorage
+      .connect(addr1)
+      .grantApproval(tokenAddress, addr2.address, 1000);
     // check approval
-    expect(await token.allowance(userStorageAddress, addr2.address)).to.equal(1000);
+    expect(await token.allowance(userStorageAddress, addr2.address)).to.equal(
+      1000
+    );
   });
 
   it("Should revert if unauthorized user tries to deposit", async function () {

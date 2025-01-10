@@ -66,6 +66,7 @@ contract Bet is IShakeOnIt {
      */
     function acceptBet(UserDetails memory _acceptor) external {
         // validate the acceptor is not the initiator or arbiter
+        require(msg.sender == _acceptor.owner, "Mismatch in acceptor address");
         require(
             msg.sender != initiator.owner,
             "Initiator cannot accept the bet"

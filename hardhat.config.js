@@ -1,11 +1,16 @@
 require("@nomicfoundation/hardhat-toolbox");
 require("hardhat-gas-reporter");
-require("dotenv").config();
+require("dotenv").config({ path: __dirname + "/.env" });
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   gasReporter: {
     currency: "USD",
+    // L1: "eth",
+    // L2: "base",
+    coinmarketcap: process.env.CMC_API_KEY,
+    L1Etherscan: process.env.ETHERSCAN_API_KEY,
+    // L2Etherscan: process.env.BASESCAN_API_KEY,
   },
   solidity: {
     compilers: [
