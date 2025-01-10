@@ -27,9 +27,9 @@ describe("BetManagement", function () {
     betManagementAddress = await betManagement.getAddress();
 
     // register users
-    await userManagement.connect(addr1).register(betManagementAddress);
-    await userManagement.connect(addr2).register(betManagementAddress);
-    await userManagement.connect(addr3).register(betManagementAddress);
+    await userManagement.connect(addr1).register("initiator", betManagementAddress);
+    await userManagement.connect(addr2).register("acceptor", betManagementAddress);
+    await userManagement.connect(addr3).register("arbiter", betManagementAddress);
 
     // get user storage addresses
     initiator = await userManagement.getUserStorage(addr1.address);
@@ -84,5 +84,40 @@ describe("BetManagement", function () {
     let betCount = await betManagement.getBetCount();
 
     expect(betCount).to.equal(1);
+  });
+
+  it("Should revert when calling deployBet if initiator has not granted approval rights", async function () {
+    await expect(
+      betManagement
+        .connect(addr1)
+        .deployBet(
+          tokenAddress,
+          initiatorDetails,
+          arbiterDetails,
+          1000,
+          50,
+          50,
+          1900,
+          "Condition"
+        )
+    ).to.be.revertedWith("Insufficient allowance");
+  });
+
+  it("Should revert when calling reportCancellation if caller is not a bet contract", async function () {
+    await expect(
+      betManagement.connect(addr1).reportCancellation()
+    ).to.be.revertedWith("Restricted: caller is missing the required role");
+  });
+
+  it("Should revert when calling reportSettlement if caller is not a bet contract", async function () {
+    await expect(
+      betManagement.connect(addr1).reportBetSettled()
+    ).to.be.revertedWith("Restricted: caller is missing the required role");
+  });
+
+  it("Should revert when calling declareWinner if caller is not a bet contract", async function () {
+    await expect(
+      betManagement.connect(addr1).reportWinnerDeclared()
+    ).to.be.revertedWith("Restricted: caller is missing the required role");
   });
 });
