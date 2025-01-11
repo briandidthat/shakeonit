@@ -164,7 +164,7 @@ contract BetManagement is IShakeOnIt, Restricted {
         UserStorage(betDetails.arbiter.storageAddress).saveBet(betDetails);
         // emit BetAccepted event
         emit BetAccepted(
-            betDetails.betContract,
+            msg.sender,
             betDetails.acceptor.storageAddress,
             betDetails.token,
             betDetails.stake
@@ -183,7 +183,7 @@ contract BetManagement is IShakeOnIt, Restricted {
         UserStorage(betDetails.arbiter.storageAddress).saveBet(betDetails);
         // emit BetWon event
         emit BetWon(
-            betDetails.betContract,
+            msg.sender,
             betDetails.winner,
             betDetails.arbiter.storageAddress,
             betDetails.token,

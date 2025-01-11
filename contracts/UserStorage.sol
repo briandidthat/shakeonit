@@ -95,7 +95,7 @@ contract UserStorage is IShakeOnIt {
     /**
      * @notice Saves or updates bet details in storage
      * @dev Can only be called by addresses with BET_MANAGEMENT_ROLE
-     * @param _betDetails Struct containing all bet information including contract address, status, and winner
+     * @param _betDetails Struct containing all bet information including contract address, status, etc
      * @custom:throws Reverts if caller doesn't have BET_MANAGEMENT_ROLE
      * @custom:updates isBet mapping - marks bet contract address as valid
      * @custom:updates deployedBets array - adds new bet contract addresses
