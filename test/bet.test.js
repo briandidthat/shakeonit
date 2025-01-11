@@ -35,9 +35,15 @@ describe("Bet", function () {
     betManagementAddress = await betManagement.getAddress();
 
     // register users
-    await userManagement.connect(addr1).register("initiator", betManagementAddress);
-    await userManagement.connect(addr2).register("acceptor", betManagementAddress);
-    await userManagement.connect(addr3).register("arbiter", betManagementAddress);
+    await userManagement
+      .connect(addr1)
+      .register("initiator", betManagementAddress);
+    await userManagement
+      .connect(addr2)
+      .register("acceptor", betManagementAddress);
+    await userManagement
+      .connect(addr3)
+      .register("arbiter", betManagementAddress);
     // get user storage addresses
     initiator = await userManagement.getUserStorage(addr1.address);
     acceptor = await userManagement.getUserStorage(addr2.address);
@@ -115,6 +121,17 @@ describe("Bet", function () {
     expect(await arbiterContract.getAllBets()).to.be.lengthOf(1);
   });
 
+  it("Should get the bet details", async function () {
+    const betDetails = await bet.getBetDetails();
+    // assert
+    expect(betDetails.initiator.toObject()).to.be.deep.equal(initiatorDetails);
+    expect(betDetails.arbiter.toObject()).to.be.deep.equal(arbiterDetails);
+    expect(betDetails.stake).to.be.equal(1000);
+    expect(betDetails.payout).to.be.equal(1900);
+    expect(betDetails.platformFee).to.be.equal(50);
+    expect(betDetails.arbiterFee).to.be.equal(50);
+  });
+
   it("Should allow the acceptor to accept the bet", async function () {
     // accept the bet
     await bet.connect(addr2).acceptBet(acceptorDetails);
@@ -130,8 +147,8 @@ describe("Bet", function () {
     await bet.connect(addr3).declareWinner(acceptorDetails, initiatorDetails);
     // assert
     expect(await bet.getStatus()).to.be.equal(2);
-    expect(await bet.getWinner()).to.be.equal(acceptorDetails.owner);
-    expect(await bet.getLoser()).to.be.equal(initiatorDetails.owner);
+    expect(await bet.getWinner()).to.be.equal(acceptorDetails.storageAddress);
+    expect(await bet.getLoser()).to.be.equal(initiatorDetails.storageAddress);
     expect(await token.balanceOf(betAddress)).to.be.equal(1900);
   });
 

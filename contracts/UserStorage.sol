@@ -17,6 +17,8 @@ contract UserStorage is IShakeOnIt {
     mapping(address => uint256) public balances;
     mapping(address => BetDetails) public betDetailsRegistry;
 
+    event BetSaved(address indexed betContract, BetStatus status);
+
     modifier onlyOwner() {
         require(msg.sender == owner, "Restricted to owner");
         _;
@@ -95,7 +97,7 @@ contract UserStorage is IShakeOnIt {
     /**
      * @notice Saves or updates bet details in storage
      * @dev Can only be called by addresses with BET_MANAGEMENT_ROLE
-     * @param _betDetails Struct containing all bet information including contract address, status, and winner
+     * @param _betDetails Struct containing all bet information including contract address, status, etc
      * @custom:throws Reverts if caller doesn't have BET_MANAGEMENT_ROLE
      * @custom:updates isBet mapping - marks bet contract address as valid
      * @custom:updates deployedBets array - adds new bet contract addresses
@@ -116,6 +118,28 @@ contract UserStorage is IShakeOnIt {
             }
         }
         betDetailsRegistry[betContract] = _betDetails;
+        emit BetSaved(betContract, _betDetails.status);
+    }
+
+    // will only be called if the bet management contract is upgraded or needs to be
+    function setNewBetManagement(address _newBetManagement) external onlyOwner {
+        betManagement = _newBetManagement;
+    }
+
+    function getOwner() external view returns (address) {
+        return owner;
+    }
+
+    function getUsername() external view returns (string memory) {
+        return username;
+    }
+
+    function getWins() external view returns (uint256) {
+        return wins;
+    }
+
+    function getLosses() external view returns (uint256) {
+        return losses;
     }
 
     function getAllBets() external view returns (address[] memory) {
@@ -134,13 +158,5 @@ contract UserStorage is IShakeOnIt {
      */
     function getTokenBalance(address _token) external view returns (uint256) {
         return balances[_token];
-    }
-
-    function getOwner() external view returns (address) {
-        return owner;
-    }
-
-    function getUsername() external view returns (string memory) {
-        return username;
     }
 }
