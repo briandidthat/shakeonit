@@ -16,33 +16,12 @@ contract BetManagement is IShakeOnIt, Restricted {
         address indexed initiator,
         address indexed arbiter,
         address token,
-        uint256 stake,
-        string condition
-    );
-
-    event BetAccepted(
-        address indexed betAddress,
-        address indexed acceptor,
-        address indexed token,
         uint256 stake
     );
 
-    event BetWon(
-        address indexed betAddress,
-        address indexed winner,
-        address indexed arbiter,
-        address token,
-        uint256 stake
-    );
-
-    event BetSettled(
-        address indexed betAddress,
-        address indexed winner,
-        address indexed arbiter,
-        address token,
-        uint256 stake
-    );
-
+    event BetAccepted(address indexed betAddress, address indexed acceptor);
+    event BetWon(address indexed betAddress, address indexed winner);
+    event BetSettled(address indexed betAddress, address indexed arbiter);
     event BetCancelled(address indexed betAddress, address indexed initiator);
 
     constructor(address _multiSig) {
@@ -133,8 +112,7 @@ contract BetManagement is IShakeOnIt, Restricted {
             _initiator.storageAddress,
             _arbiter.storageAddress,
             _token,
-            _stake,
-            _condition
+            _stake
         );
 
         return betAddress;
@@ -143,11 +121,7 @@ contract BetManagement is IShakeOnIt, Restricted {
     /**
      * @notice Accepts the bet and funds the escrow.
      */
-    function acceptBet()
-        external
-        hasCorrectRole(BET_CONTRACT_ROLE)
-        returns (bool)
-    {
+    function acceptBet() external hasCorrectRole(BET_CONTRACT_ROLE) {
         BetDetails memory betDetails = Bet(msg.sender).getBetDetails();
         // fund the bet contract
         require(
@@ -163,13 +137,7 @@ contract BetManagement is IShakeOnIt, Restricted {
         UserStorage(betDetails.acceptor.storageAddress).saveBet(betDetails);
         UserStorage(betDetails.arbiter.storageAddress).saveBet(betDetails);
         // emit BetAccepted event
-        emit BetAccepted(
-            msg.sender,
-            betDetails.acceptor.storageAddress,
-            betDetails.token,
-            betDetails.stake
-        );
-        return true;
+        emit BetAccepted(msg.sender, betDetails.acceptor.storageAddress);
     }
 
     /**
@@ -182,13 +150,7 @@ contract BetManagement is IShakeOnIt, Restricted {
         UserStorage(betDetails.acceptor.storageAddress).saveBet(betDetails);
         UserStorage(betDetails.arbiter.storageAddress).saveBet(betDetails);
         // emit BetWon event
-        emit BetWon(
-            msg.sender,
-            betDetails.winner,
-            betDetails.arbiter.storageAddress,
-            betDetails.token,
-            betDetails.stake
-        );
+        emit BetWon(msg.sender, betDetails.winner);
     }
 
     function reportBetSettled() external hasCorrectRole(BET_CONTRACT_ROLE) {
@@ -200,13 +162,7 @@ contract BetManagement is IShakeOnIt, Restricted {
         // remove the BET_CONTRACT_ROLE from the bet contract
         _revokeRole(BET_CONTRACT_ROLE, msg.sender);
         // emit BetSettled event
-        emit BetSettled(
-            msg.sender,
-            betDetails.winner,
-            betDetails.loser,
-            betDetails.token,
-            betDetails.stake
-        );
+        emit BetSettled(msg.sender, betDetails.arbiter.storageAddress);
     }
 
     /**
