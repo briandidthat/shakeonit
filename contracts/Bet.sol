@@ -90,7 +90,7 @@ contract Bet is IShakeOnIt {
         balances[_acceptor.storageAddress] = stake;
         balances[arbiter.storageAddress] = arbiterFee;
         // recieve the stake from the acceptor
-        require(betManagement.acceptBet(), "Bet acceptance failed");
+        betManagement.acceptBet();
     }
 
     /**
@@ -181,21 +181,21 @@ contract Bet is IShakeOnIt {
     // Internal functions
 
     function _buildBetDetails() internal view returns (BetDetails memory) {
-        BetDetails memory betDetails = BetDetails({
-            betContract: address(this),
-            token: address(token),
-            initiator: initiator,
-            arbiter: arbiter,
-            acceptor: acceptor,
-            winner: winner.storageAddress,
-            loser: loser.storageAddress,
-            stake: stake,
-            arbiterFee: arbiterFee,
-            platformFee: platformFee,
-            payout: payout,
-            status: status
-        });
-        return betDetails;
+        return
+            BetDetails({
+                betContract: address(this),
+                token: address(token),
+                initiator: initiator,
+                arbiter: arbiter,
+                acceptor: acceptor,
+                winner: winner.storageAddress,
+                loser: loser.storageAddress,
+                stake: stake,
+                arbiterFee: arbiterFee,
+                platformFee: platformFee,
+                payout: payout,
+                status: status
+            });
     }
 
     // View functions
@@ -222,12 +222,12 @@ contract Bet is IShakeOnIt {
 
     function getWinner() external view returns (address) {
         require(status != BetStatus.INITIATED, "Bet has not been declared yet");
-        return winner.owner;
+        return winner.storageAddress;
     }
 
     function getLoser() external view returns (address) {
         require(status != BetStatus.INITIATED, "Bet has not been declared yet");
-        return loser.owner;
+        return loser.storageAddress;
     }
 
     function getAmount() external view returns (uint256) {
@@ -254,21 +254,11 @@ contract Bet is IShakeOnIt {
         return condition;
     }
 
-    function getBetDetails() external view returns (BetDetails memory) {
-        BetDetails memory betDetails = BetDetails({
-            betContract: address(this),
-            token: address(token),
-            initiator: initiator,
-            arbiter: arbiter,
-            acceptor: acceptor,
-            winner: winner.storageAddress,
-            loser: loser.storageAddress,
-            stake: stake,
-            arbiterFee: arbiterFee,
-            platformFee: platformFee,
-            payout: payout,
-            status: status
-        });
-        return betDetails;
+    function getBetDetails()
+        external
+        view
+        returns (BetDetails memory _betDetails)
+    {
+        _betDetails = _buildBetDetails();
     }
 }

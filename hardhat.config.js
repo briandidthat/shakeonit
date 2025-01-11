@@ -7,10 +7,10 @@ module.exports = {
   gasReporter: {
     currency: "USD",
     // L1: "eth",
-    // L2: "base",
+    L2: "base",
     coinmarketcap: process.env.CMC_API_KEY,
-    L1Etherscan: process.env.ETHERSCAN_API_KEY,
-    // L2Etherscan: process.env.BASESCAN_API_KEY,
+    // L1Etherscan: process.env.ETHERSCAN_API_KEY,
+    L2Etherscan: process.env.BASESCAN_API_KEY,
   },
   solidity: {
     compilers: [

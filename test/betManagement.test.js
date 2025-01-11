@@ -27,9 +27,15 @@ describe("BetManagement", function () {
     betManagementAddress = await betManagement.getAddress();
 
     // register users
-    await userManagement.connect(addr1).register("initiator", betManagementAddress);
-    await userManagement.connect(addr2).register("acceptor", betManagementAddress);
-    await userManagement.connect(addr3).register("arbiter", betManagementAddress);
+    await userManagement
+      .connect(addr1)
+      .register("initiator", betManagementAddress);
+    await userManagement
+      .connect(addr2)
+      .register("acceptor", betManagementAddress);
+    await userManagement
+      .connect(addr3)
+      .register("arbiter", betManagementAddress);
 
     // get user storage addresses
     initiator = await userManagement.getUserStorage(addr1.address);
@@ -101,6 +107,12 @@ describe("BetManagement", function () {
           "Condition"
         )
     ).to.be.revertedWith("Insufficient allowance");
+  });
+
+  it("Should revert when calling acceptBet if caller is not a bet contract", async function () {
+    await expect(betManagement.connect(addr1).acceptBet()).to.be.revertedWith(
+      "Restricted: caller is missing the required role"
+    );
   });
 
   it("Should revert when calling reportCancellation if caller is not a bet contract", async function () {
