@@ -19,10 +19,18 @@ contract BetManagement is IShakeOnIt, Restricted {
         uint256 stake
     );
 
-    event BetAccepted(address indexed betAddress, address indexed acceptor);
-    event BetWon(address indexed betAddress, address indexed winner);
-    event BetSettled(address indexed betAddress, address indexed arbiter);
     event BetCancelled(address indexed betAddress, address indexed initiator);
+    event BetAccepted(address indexed betAddress, address indexed acceptor);
+    event BetWon(
+        address indexed betAddress,
+        uint256 arbiterFee,
+        uint256 platformFee
+    );
+    event BetSettled(
+        address indexed betAddress,
+        address indexed token,
+        uint256 payout
+    );
 
     constructor(address _multiSig) {
         // grant the default admin role to the multiSig address
@@ -47,6 +55,8 @@ contract BetManagement is IShakeOnIt, Restricted {
      * @return address The address of the newly deployed bet contract
      * @custom:throws "Amount should be greater than 0" if stake is 0
      * @custom:throws "Zero address not allowed" if initiator or arbiter address is zero
+     * @custom:throws "Insufficient balance" if initiator storage address does not have enough tokens
+     * @custom:throws "Insufficient allowance" if initiiatior storage address does have enough allowance
      * @custom:throws "Token transfer failed" if the token transfer fails
      * @custom:emits BetCreated event with bet details
      */
@@ -65,6 +75,10 @@ contract BetManagement is IShakeOnIt, Restricted {
             _initiator.storageAddress != address(0) &&
                 _arbiter.storageAddress != address(0),
             "Zero address not allowed"
+        );
+        require(
+            IERC20(_token).balanceOf(_initiator.storageAddress) >= _stake,
+            "Insufficient balance"
         );
         require(
             IERC20(_token).allowance(
@@ -150,7 +164,7 @@ contract BetManagement is IShakeOnIt, Restricted {
         UserStorage(betDetails.acceptor.storageAddress).saveBet(betDetails);
         UserStorage(betDetails.arbiter.storageAddress).saveBet(betDetails);
         // emit BetWon event
-        emit BetWon(msg.sender, betDetails.winner);
+        emit BetWon(msg.sender, betDetails.arbiterFee, betDetails.platformFee);
     }
 
     function reportBetSettled() external hasCorrectRole(BET_CONTRACT_ROLE) {
@@ -162,7 +176,7 @@ contract BetManagement is IShakeOnIt, Restricted {
         // remove the BET_CONTRACT_ROLE from the bet contract
         _revokeRole(BET_CONTRACT_ROLE, msg.sender);
         // emit BetSettled event
-        emit BetSettled(msg.sender, betDetails.arbiter.storageAddress);
+        emit BetSettled(msg.sender, betDetails.token, betDetails.payout);
     }
 
     /**
