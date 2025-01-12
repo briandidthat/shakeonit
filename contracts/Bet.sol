@@ -162,6 +162,35 @@ contract Bet is IShakeOnIt {
         betManagement.reportWinnerDeclared();
     }
 
+    function forfeit() external {
+        require(status == BetStatus.FUNDED, "Bet must be in funded state");
+        require(
+            msg.sender == initiator.owner || msg.sender == acceptor.owner,
+            "Only participants can forfeit"
+        );
+
+        if (msg.sender == initiator.owner) {
+            winner = acceptor;
+            balances[initiator.storageAddress] = 0;
+            balances[acceptor.storageAddress] = payout + arbiterFee;
+        } else {
+            winner = initiator;
+            balances[initiator.storageAddress] = 0;
+            balances[acceptor.storageAddress] = payout + arbiterFee;
+        }
+        balances[arbiter.storageAddress] = 0;
+
+        // get the multiSig wallet address
+        address multiSigWallet = betManagement.getMultiSig();
+        // transfer the platform fee to the multisig wallet
+        require(
+            token.transfer(multiSigWallet, platformFee),
+            "Token transfer failed"
+        );
+        // report the winner to the bet management contract
+        betManagement.reportWinnerDeclared();
+    }
+
     function withdrawEarnings() external onlyWinner {
         require(status == BetStatus.WON, "Bet has not been declared won yet");
         require(balances[winner.storageAddress] > 0, "No funds to withdraw");

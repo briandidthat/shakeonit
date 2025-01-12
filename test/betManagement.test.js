@@ -4,7 +4,7 @@ const {
   getUserManagementFixture,
   getBetManagementFixture,
   getTokenFixture,
-} = require("./utils");
+} = require("../utils");
 
 const {
   abi,
@@ -22,8 +22,8 @@ describe("BetManagement", function () {
 
   beforeEach(async function () {
     [multiSig, addr1, addr2, addr3] = await ethers.getSigners();
-    userManagement = await getUserManagementFixture(multiSig.address);
-    betManagement = await getBetManagementFixture(multiSig.address);
+    userManagement = await getUserManagementFixture(multiSig);
+    betManagement = await getBetManagementFixture(multiSig);
     betManagementAddress = await betManagement.getAddress();
 
     // register users
