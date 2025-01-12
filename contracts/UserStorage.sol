@@ -68,7 +68,7 @@ contract UserStorage is IShakeOnIt {
     /**
      * @dev Grant approval to a spender
      * @param _token address of the token
-     * @param _spender address of the spender
+     * @param _spender address of the spender (the bet management contract)
      * @param _amount amount to approve
      */
     function grantApproval(
@@ -106,6 +106,8 @@ contract UserStorage is IShakeOnIt {
      */
     function saveBet(BetDetails memory _betDetails) external onlyBetManagement {
         address betContract = _betDetails.betContract;
+        address token = _betDetails.token;
+
         if (!isBet[betContract]) {
             isBet[betContract] = true;
             deployedBets.push(betContract);
@@ -113,8 +115,12 @@ contract UserStorage is IShakeOnIt {
         if (_betDetails.status == BetStatus.WON) {
             if (_betDetails.winner == address(this)) {
                 wins++;
-            } else {
+                balances[token] += _betDetails.payout;
+            } else if (_betDetails.loser == address(this)) {
                 losses++;
+                balances[token] -= _betDetails.stake;
+            } else {
+                balances[token] += _betDetails.arbiterFee;
             }
         }
         betDetailsRegistry[betContract] = _betDetails;
