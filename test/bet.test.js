@@ -28,11 +28,14 @@ describe("Bet", function () {
     betAddress;
   beforeEach(async function () {
     [multiSig, addr1, addr2, addr3] = await ethers.getSigners();
-
-    betManagement = await getBetManagementFixture(multiSig.address);
+    // deploy user management contract
     userManagement = await getUserManagementFixture(multiSig.address);
-    token = await getTokenFixture(multiSig);
+    // deploy bet management contract and get address
+    betManagement = await getBetManagementFixture(multiSig.address);
     betManagementAddress = await betManagement.getAddress();
+    // deploy test token contract and get address
+    token = await getTokenFixture(multiSig);
+    tokenAddress = await token.getAddress();
 
     // register users
     await userManagement
@@ -48,7 +51,7 @@ describe("Bet", function () {
     initiator = await userManagement.getUserStorage(addr1.address);
     acceptor = await userManagement.getUserStorage(addr2.address);
     arbiter = await userManagement.getUserStorage(addr3.address);
-
+    // create user details objects
     initiatorDetails = {
       owner: addr1.address,
       storageAddress: initiator,
@@ -62,13 +65,10 @@ describe("Bet", function () {
       storageAddress: arbiter,
     };
 
-    // deploy TestToken
-    token = await getTokenFixture(multiSig);
-    tokenAddress = await token.getAddress();
     // send 10000 tokens to initiator
-    await token.connect(multiSig).transfer(initiator, 1000);
+    await token.connect(multiSig).transfer(addr1.address, 1000);
     // send 10000 tokens to acceptor
-    await token.connect(multiSig).transfer(acceptor, 1000);
+    await token.connect(multiSig).transfer(addr2.address, 1000);
 
     // get the initiator's user storage contract (addr1)
     initiatorContract = await ethers.getContractAt(userStorageAbi, initiator);
@@ -76,13 +76,29 @@ describe("Bet", function () {
     acceptorContract = await ethers.getContractAt(userStorageAbi, acceptor);
     // get the arbiter's user storage contract (addr3)
     arbiterContract = await ethers.getContractAt(userStorageAbi, arbiter);
-    // grant approval rights to the betManagement contract
+
+    // simulate the user approving their storage contract for the first time for that token.
+    // then, deposit 1000 tokens into user storage contract.
+    // then, approve the bet management contract to start creating bets
+    await token
+      .connect(addr1)
+      .approve(initiatorDetails.storageAddress, ethers.MaxUint256);
+    await initiatorContract.connect(addr1).deposit(tokenAddress, 1000);
     await initiatorContract
       .connect(addr1)
-      .grantApproval(tokenAddress, betManagementAddress, 100000);
+      .grantApproval(tokenAddress, betManagementAddress, ethers.MaxUint256);
+
+    // simulate the user approving their storage contract for the first time for that token.
+    // then, deposit 1000 tokens into user storage contract.
+    // then, approve the bet management contract to start creating bets
+    await token
+      .connect(addr2)
+      .approve(acceptorDetails.storageAddress, ethers.MaxUint256);
+    await acceptorContract.connect(addr2).deposit(tokenAddress, 1000);
     await acceptorContract
       .connect(addr2)
-      .grantApproval(tokenAddress, betManagementAddress, 100000);
+      .grantApproval(tokenAddress, betManagementAddress, ethers.MaxUint256);
+
     // deploy the bet
     let tx = await betManagement.connect(addr1).deployBet(
       tokenAddress,
