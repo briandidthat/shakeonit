@@ -4,7 +4,7 @@ const {
   getUserManagementFixture,
   getTokenFixture,
   getBetManagementFixture,
-} = require("./utils");
+} = require("../utils");
 const {
   abi,
 } = require("../artifacts/contracts/UserStorage.sol/UserStorage.json");
@@ -15,8 +15,8 @@ describe("UserStorage", function () {
 
   beforeEach(async function () {
     [multiSig, addr1, addr2] = await ethers.getSigners();
-    userManagement = await getUserManagementFixture(multiSig.address);
-    betManagement = await getBetManagementFixture(multiSig.address);
+    userManagement = await getUserManagementFixture(multiSig);
+    betManagement = await getBetManagementFixture(multiSig);
     const betManagementAddress = await betManagement.getAddress();
     // Register addr1
     await userManagement
