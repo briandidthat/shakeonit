@@ -111,6 +111,9 @@ contract BetManagement is IShakeOnIt, Restricted {
             "Token transfer failed"
         );
 
+        // update balance after successful transfer
+        bet.updateBalance(_token, _stake);
+
         // update the state
         isBet[betAddress] = true;
         deployedBets.push(betAddress);
@@ -191,6 +194,16 @@ contract BetManagement is IShakeOnIt, Restricted {
         _revokeRole(BET_CONTRACT_ROLE, msg.sender);
         // emit BetCancelled event
         emit BetCancelled(msg.sender, betDetails.initiator.storageAddress);
+    }
+
+    function setNewMultiSig(
+        address _newMultiSig
+    ) external onlyRole(MULTISIG_ROLE) {
+        _grantRole(DEFAULT_ADMIN_ROLE, _newMultiSig);
+        _grantRole(MULTISIG_ROLE, _newMultiSig);
+        _revokeRole(MULTISIG_ROLE, msg.sender);
+
+        multiSig = _newMultiSig;
     }
 
     function getMultiSig() external view returns (address) {

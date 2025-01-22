@@ -6,6 +6,7 @@ import "./DataCenter.sol";
 import "./Restricted.sol";
 
 contract UserManagement is Restricted {
+    address public multisig;
     address[] public users;
     address[] public userStorageContracts;
     mapping(address => bool) public isUser;
@@ -24,6 +25,8 @@ contract UserManagement is Restricted {
         _grantRole(DEFAULT_ADMIN_ROLE, _multiSig);
         // set the owner role to the multiSig address
         _grantRole(MULTISIG_ROLE, _multiSig);
+        // set the multisig address
+        multisig = _multiSig;
     }
 
     function register(
@@ -53,6 +56,20 @@ contract UserManagement is Restricted {
         emit UserAdded(msg.sender, userStorageAddress);
 
         return address(userStorage);
+    }
+
+    function setNewMultiSig(
+        address _newMultiSig
+    ) external onlyRole(MULTISIG_ROLE) {
+        _grantRole(DEFAULT_ADMIN_ROLE, _newMultiSig);
+        _grantRole(MULTISIG_ROLE, _newMultiSig);
+        _revokeRole(MULTISIG_ROLE, msg.sender);
+
+        multisig = _newMultiSig;
+    }
+
+    function getMultiSig() external view returns (address) {
+        return multisig;
     }
 
     /**
