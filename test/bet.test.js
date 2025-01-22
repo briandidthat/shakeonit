@@ -65,10 +65,14 @@ describe("Bet", function () {
       storageAddress: arbiter,
     };
 
-    // send 10000 tokens to initiator
-    await token.connect(multiSig).transfer(addr1.address, 1000);
-    // send 10000 tokens to acceptor
-    await token.connect(multiSig).transfer(addr2.address, 1000);
+    // send 1000 tokens to initiator
+    await token
+      .connect(multiSig)
+      .transfer(addr1.address, ethers.parseEther("1000"));
+    // send 1000 tokens to acceptor
+    await token
+      .connect(multiSig)
+      .transfer(addr2.address, ethers.parseEther("1000"));
 
     // get the initiator's user storage contract (addr1)
     initiatorContract = await ethers.getContractAt(userStorageAbi, initiator);
@@ -83,7 +87,9 @@ describe("Bet", function () {
     await token
       .connect(addr1)
       .approve(initiatorDetails.storageAddress, ethers.MaxUint256);
-    await initiatorContract.connect(addr1).deposit(tokenAddress, 1000);
+    await initiatorContract
+      .connect(addr1)
+      .deposit(tokenAddress, ethers.parseEther("1000"));
     await initiatorContract
       .connect(addr1)
       .grantApproval(tokenAddress, betManagementAddress, ethers.MaxUint256);
@@ -94,22 +100,26 @@ describe("Bet", function () {
     await token
       .connect(addr2)
       .approve(acceptorDetails.storageAddress, ethers.MaxUint256);
-    await acceptorContract.connect(addr2).deposit(tokenAddress, 1000);
+    await acceptorContract
+      .connect(addr2)
+      .deposit(tokenAddress, ethers.parseEther("1000"));
     await acceptorContract
       .connect(addr2)
       .grantApproval(tokenAddress, betManagementAddress, ethers.MaxUint256);
 
     // deploy the bet
-    let tx = await betManagement.connect(addr1).deployBet(
-      tokenAddress,
-      initiatorDetails,
-      arbiterDetails,
-      1000, // stake
-      50, // .05% fee for arbiter
-      50, // .05% fee for platform
-      1900, // payout
-      "Condition"
-    );
+    let tx = await betManagement
+      .connect(addr1)
+      .deployBet(
+        tokenAddress,
+        initiatorDetails,
+        arbiterDetails,
+        ethers.parseEther("1000"),
+        ethers.parseEther("50"),
+        ethers.parseEther("50"),
+        ethers.parseEther("1900"),
+        "Condition"
+      );
     let receipt = await tx.wait();
     const event = getEventObject("BetCreated", receipt.logs);
     // the first argument of the event is the bet address
@@ -127,10 +137,10 @@ describe("Bet", function () {
     // assert
     expect(await bet.getInitiator()).to.be.equal(initiator);
     expect(await bet.getArbiter()).to.be.equal(arbiter);
-    expect(await bet.getStake()).to.be.equal(1000);
-    expect(await bet.getPayout()).to.be.equal(1900);
-    expect(await bet.getPlatformFee()).to.be.equal(50);
-    expect(await bet.getArbiterFee()).to.be.equal(50);
+    expect(await bet.getStake()).to.be.equal(ethers.parseEther("1000"));
+    expect(await bet.getPayout()).to.be.equal(ethers.parseEther("1900"));
+    expect(await bet.getPlatformFee()).to.be.equal(ethers.parseEther("50"));
+    expect(await bet.getArbiterFee()).to.be.equal(ethers.parseEther("50"));
     expect(await bet.getCondition()).to.be.equal("Condition");
     // assert the bet was added to the user storage contracts
     expect(await initiatorContract.getAllBets()).to.be.lengthOf(1);
@@ -142,17 +152,17 @@ describe("Bet", function () {
     // assert
     expect(betDetails.initiator.toObject()).to.be.deep.equal(initiatorDetails);
     expect(betDetails.arbiter.toObject()).to.be.deep.equal(arbiterDetails);
-    expect(betDetails.stake).to.be.equal(1000);
-    expect(betDetails.payout).to.be.equal(1900);
-    expect(betDetails.platformFee).to.be.equal(50);
-    expect(betDetails.arbiterFee).to.be.equal(50);
+    expect(betDetails.stake).to.be.equal(ethers.parseEther("1000"));
+    expect(betDetails.payout).to.be.equal(ethers.parseEther("1900"));
+    expect(betDetails.platformFee).to.be.equal(ethers.parseEther("50"));
+    expect(betDetails.arbiterFee).to.be.equal(ethers.parseEther("50"));
   });
 
   it("Should allow the acceptor to accept the bet", async function () {
     // accept the bet
     await bet.connect(addr2).acceptBet(acceptorDetails);
     // assert
-    expect(await token.balanceOf(betAddress)).to.be.equal(2000);
+    expect(await token.balanceOf(betAddress)).to.be.equal(ethers.parseEther("2000"));
     expect(await acceptorContract.getAllBets()).to.be.lengthOf(1);
   });
 
@@ -162,10 +172,10 @@ describe("Bet", function () {
     // declare the winner
     await bet.connect(addr3).declareWinner(acceptorDetails, initiatorDetails);
     // assert
-    expect(await bet.getStatus()).to.be.equal(2);
+    expect(await bet.getStatus()).to.be.equal(3);
     expect(await bet.getWinner()).to.be.equal(acceptorDetails.storageAddress);
     expect(await bet.getLoser()).to.be.equal(initiatorDetails.storageAddress);
-    expect(await token.balanceOf(betAddress)).to.be.equal(1900);
+    expect(await token.balanceOf(betAddress)).to.be.equal(ethers.parseEther("1900"));
   });
 
   it("Should allow the winner to withdraw the winnings", async function () {
@@ -176,9 +186,9 @@ describe("Bet", function () {
     // withdraw the winnings
     await bet.connect(addr2).withdrawEarnings();
     // assert
-    expect(await bet.getStatus()).to.be.equal(3);
-    expect(await token.balanceOf(acceptor)).to.be.equal(1900);
-    expect(await token.balanceOf(arbiter)).to.be.equal(50);
+    expect(await bet.getStatus()).to.be.equal(4);
+    expect(await token.balanceOf(acceptor)).to.be.equal(ethers.parseEther("1900"));
+    expect(await token.balanceOf(arbiter)).to.be.equal(ethers.parseEther("50"));
     expect(await token.balanceOf(betAddress)).to.be.equal(0);
   });
 
@@ -186,9 +196,9 @@ describe("Bet", function () {
     // cancel the bet
     await bet.connect(addr1).cancelBet();
     // assert
-    expect(await bet.getStatus()).to.be.equal(4);
+    expect(await bet.getStatus()).to.be.equal(5);
     expect(await token.balanceOf(betAddress)).to.be.equal(0);
-    expect(await token.balanceOf(initiator)).to.be.equal(1000);
+    expect(await token.balanceOf(initiator)).to.be.equal(ethers.parseEther("1000"));
   });
 
   it("Should revert if the initiator tries to declare the winner", async function () {

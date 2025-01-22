@@ -11,8 +11,8 @@ const {
 } = require("../artifacts/contracts/UserStorage.sol/UserStorage.json");
 
 describe("BetManagement", function () {
-  let initiatorDetails, acceptorDetails, arbiterDetails;
-  let betManagement, userManagement, token;
+  let initiatorDetails, arbiterDetails;
+  let betManagement, userManagement, initiatorContract, token;
   let multiSig,
     initiator,
     acceptor,
@@ -21,45 +21,62 @@ describe("BetManagement", function () {
     betManagementAddress;
 
   beforeEach(async function () {
-    [multiSig, addr1, addr2, addr3] = await ethers.getSigners();
+    [multiSig, initiator, acceptor, arbiter] = await ethers.getSigners();
     userManagement = await getUserManagementFixture(multiSig);
     betManagement = await getBetManagementFixture(multiSig);
     betManagementAddress = await betManagement.getAddress();
 
-    // register users
-    await userManagement
-      .connect(addr1)
-      .register("initiator", betManagementAddress);
-    await userManagement
-      .connect(addr2)
-      .register("acceptor", betManagementAddress);
-    await userManagement
-      .connect(addr3)
-      .register("arbiter", betManagementAddress);
-
-    // get user storage addresses
-    initiator = await userManagement.getUserStorage(addr1.address);
-    acceptor = await userManagement.getUserStorage(addr2.address);
-    arbiter = await userManagement.getUserStorage(addr3.address);
-
-    initiatorDetails = {
-      owner: addr1.address,
-      storageAddress: initiator,
-    };
-    acceptorDetails = {
-      owner: addr2.address,
-      storageAddress: acceptor,
-    };
-    arbiterDetails = {
-      owner: addr3.address,
-      storageAddress: arbiter,
-    };
-
     // deploy TestToken
     token = await getTokenFixture(multiSig);
     tokenAddress = await token.getAddress();
-    // send 10000 tokens to initiator
-    await token.connect(multiSig).transfer(initiator, 10000);
+
+    // register user
+    await userManagement
+      .connect(initiator)
+      .register("initiator", betManagementAddress);
+    await userManagement
+      .connect(arbiter)
+      .register("arbiter", betManagementAddress);
+
+    // get user storage addresses
+    let initiatorContractAddress = await userManagement.getUserStorage(
+      initiator.address
+    );
+    // create user details object
+    initiatorDetails = {
+      owner: initiator.address,
+      storageAddress: initiatorContractAddress,
+    };
+
+    const arbiterContractAddress = await userManagement.getUserStorage(
+      arbiter.address
+    );
+
+    arbiterDetails = {
+      owner: arbiter.address,
+      storageAddress: arbiterContractAddress,
+    };
+
+    // create pointer to user storage contract
+    initiatorContract = await ethers.getContractAt(
+      abi,
+      initiatorContractAddress
+    );
+
+    // send 1000 tokens to initiator
+    await token
+      .connect(multiSig)
+      .transfer(initiator.address, ethers.parseEther("1000"));
+
+    // approve the user storage contract to transfer tokens for deposit
+    await token
+      .connect(initiator)
+      .approve(initiatorDetails.storageAddress, ethers.MaxUint256);
+
+    // deposit 1000 test tokens in storage contract
+    await initiatorContract
+      .connect(initiator)
+      .deposit(tokenAddress, ethers.parseEther("1000"));
   });
 
   it("Should deploy the BetManagement contract", async function () {
@@ -67,23 +84,31 @@ describe("BetManagement", function () {
   });
 
   it("Should create a bet", async function () {
-    // get the initiator's user storage contract (addr1)
-    let userStorageContract = await ethers.getContractAt(abi, initiator);
     // grant approval rights to the betManagement contract
-    await userStorageContract
-      .connect(addr1)
-      .grantApproval(tokenAddress, betManagementAddress, 1000);
+    await initiatorContract
+      .connect(initiator)
+      .grantApproval(
+        tokenAddress,
+        betManagementAddress,
+        ethers.parseEther("1000")
+      );
+
+    // approve the bet management contract to create bets
+    await initiatorContract
+      .connect(initiator)
+      .grantApproval(tokenAddress, betManagementAddress, ethers.MaxUint256);
+
     // deploy the bet
     await betManagement
-      .connect(addr1)
+      .connect(initiator)
       .deployBet(
         tokenAddress,
         initiatorDetails,
         arbiterDetails,
-        1000,
-        50,
-        50,
-        1900,
+        ethers.parseEther("1000"),
+        ethers.parseEther("50"),
+        ethers.parseEther("50"),
+        ethers.parseEther("1900"),
         "Condition"
       );
     // get the bet count
@@ -95,41 +120,41 @@ describe("BetManagement", function () {
   it("Should revert when calling deployBet if initiator has not granted approval rights", async function () {
     await expect(
       betManagement
-        .connect(addr1)
+        .connect(initiator)
         .deployBet(
           tokenAddress,
           initiatorDetails,
           arbiterDetails,
-          1000,
-          50,
-          50,
-          1900,
+          ethers.parseEther("1000"),
+          ethers.parseEther("50"),
+          ethers.parseEther("50"),
+          ethers.parseEther("1900"),
           "Condition"
         )
     ).to.be.revertedWith("Insufficient allowance");
   });
 
   it("Should revert when calling acceptBet if caller is not a bet contract", async function () {
-    await expect(betManagement.connect(addr1).acceptBet()).to.be.revertedWith(
-      "Restricted: caller is missing the required role"
-    );
+    await expect(
+      betManagement.connect(initiator).acceptBet()
+    ).to.be.revertedWith("Restricted: caller is missing the required role");
   });
 
   it("Should revert when calling reportCancellation if caller is not a bet contract", async function () {
     await expect(
-      betManagement.connect(addr1).reportCancellation()
+      betManagement.connect(initiator).reportCancellation()
     ).to.be.revertedWith("Restricted: caller is missing the required role");
   });
 
   it("Should revert when calling reportSettlement if caller is not a bet contract", async function () {
     await expect(
-      betManagement.connect(addr1).reportBetSettled()
+      betManagement.connect(initiator).reportBetSettled()
     ).to.be.revertedWith("Restricted: caller is missing the required role");
   });
 
   it("Should revert when calling declareWinner if caller is not a bet contract", async function () {
     await expect(
-      betManagement.connect(addr1).reportWinnerDeclared()
+      betManagement.connect(initiator).reportWinnerDeclared()
     ).to.be.revertedWith("Restricted: caller is missing the required role");
   });
 });

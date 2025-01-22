@@ -1,4 +1,5 @@
 const { ethers } = require("hardhat");
+const fs = require("fs");
 
 async function getUserManagementFixture(multiSig) {
   const userManagement = await ethers.deployContract(
@@ -28,11 +29,7 @@ async function getDataCenterFixture(multiSig, userManagement, betManagement) {
 }
 
 async function getTokenFixture(multiSig) {
-  const token = await ethers.deployContract(
-    "MockERC20",
-    ["TestToken", "TTK", 1000000],
-    multiSig
-  );
+  const token = await ethers.deployContract("Vbux", multiSig);
   return token;
 }
 
@@ -51,10 +48,21 @@ function getEventObject(target, events) {
   return event;
 }
 
+function writeToFile(fileName, content) {
+  fs.writeFileSync(fileName, content, (err) => {
+    if (err) {
+      console.error(err);
+      return;
+    }
+    console.log("File has been created successfully!");
+  });
+}
+
 module.exports = {
   getEventObject,
   getUserManagementFixture,
   getBetManagementFixture,
   getDataCenterFixture,
   getTokenFixture,
+  writeToFile,
 };
