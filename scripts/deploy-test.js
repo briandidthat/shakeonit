@@ -3,7 +3,6 @@ const {
   getUserManagementFixture,
   getBetManagementFixture,
   getDataCenterFixture,
-  writeToFile,
 } = require("../utils");
 
 async function main() {
@@ -25,7 +24,6 @@ async function main() {
   console.log(`User Management Contract address: ${userManagementAddress}`);
   console.log(`Bet Management contract address: ${betManagementAddress}`);
   console.log(`Data Center contract address: ${dataCenterAddress}`);
-
 
   // simulate users registering for the platform
   await userManagement

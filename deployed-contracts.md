@@ -1,6 +1,6 @@
 ### BASE-SEPOLIA TESTNET:
     
-- User Management Contract: 
-- Bet Management contract: 
-- Data Center contract: 
-- Vbux contract: 0x9D2A5b0B86a630333eBC02E3cd080Dc60Fe583F9
+- User Management Contract: ```0x7f68AAE9C9cB52E4689763F9Ef2c859778578230```
+- Bet Management contract: ```0x021b140B5F931237eD6934B539dE57c111584754```
+- Data Center contract: ```0x934726B886D24fdD98701aF57BedcBCd137870FF```
+- Vbux contract: ```0x9D2A5b0B86a630333eBC02E3cd080Dc60Fe583F9```
