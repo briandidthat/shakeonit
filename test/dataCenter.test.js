@@ -4,7 +4,7 @@ const {
   getUserManagementFixture,
   getDataCenterFixture,
   getBetManagementFixture,
-} = require("./utils");
+} = require("../utils");
 
 describe("DataCenter", function () {
   let dataCenter, userManagement, betManagement;
@@ -12,11 +12,11 @@ describe("DataCenter", function () {
 
   beforeEach(async function () {
     [multiSig, newMultiSig, addr1, addr2] = await ethers.getSigners();
-    userManagement = await getUserManagementFixture(multiSig.address);
-    betManagement = await getBetManagementFixture(multiSig.address);
+    userManagement = await getUserManagementFixture(multiSig);
+    betManagement = await getBetManagementFixture(multiSig);
     // Deploy the DataCenter contract
     dataCenter = await getDataCenterFixture(
-      multiSig.address,
+      multiSig,
       await userManagement.getAddress(),
       await betManagement.getAddress()
     );
@@ -61,7 +61,7 @@ describe("DataCenter", function () {
 
   it("Should set a new UserManagement contract address", async function () {
     // Deploy a new UserManagement contract
-    let temp = await getUserManagementFixture(multiSig.address);
+    let temp = await getUserManagementFixture(multiSig);
     let tempAddr = await temp.getAddress();
     // Set the new UserManagement contract address
     await dataCenter.connect(multiSig).setNewUserManagement(tempAddr);
@@ -71,7 +71,7 @@ describe("DataCenter", function () {
 
   it("Should set a new BetManagement contract address", async function () {
     // Deploy a new BetManagement contract
-    let temp = await getBetManagementFixture(multiSig.address);
+    let temp = await getBetManagementFixture(multiSig);
     let tempAddr = await temp.getAddress();
     // Set the new BetManagement contract address
     await dataCenter.connect(multiSig).setNewBetManagement(tempAddr);

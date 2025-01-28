@@ -3,15 +3,15 @@ const { ethers } = require("hardhat");
 const {
   getUserManagementFixture,
   getBetManagementFixture,
-} = require("./utils");
+} = require("../utils");
 
 describe("UserManagement", function () {
   let userManagement, betManagement;
   let multiSigWallet, user, betManagementAddress;
   beforeEach(async function () {
     [multiSigWallet, user] = await ethers.getSigners();
-    userManagement = await getUserManagementFixture(multiSigWallet.address);
-    betManagement = await getBetManagementFixture(multiSigWallet.address);
+    userManagement = await getUserManagementFixture(multiSigWallet);
+    betManagement = await getBetManagementFixture(multiSigWallet);
     betManagementAddress = await betManagement.getAddress();
     // register user for testing
     await userManagement.connect(user).register("tester", betManagementAddress);

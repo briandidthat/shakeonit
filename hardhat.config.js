@@ -28,8 +28,12 @@ module.exports = {
   networks: {
     localhost: {
       url: "http://127.0.0.1:8545",
-      gas: 2100000,
-      gasPrice: 8365186212,
+    },
+    // for testnet
+    "base-sepolia": {
+      url: "https://sepolia.base.org",
+      accounts: [process.env.WALLET_KEY],
     },
   },
+  defaultNetwork: "hardhat",
 };

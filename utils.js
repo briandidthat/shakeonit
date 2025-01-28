@@ -1,34 +1,35 @@
 const { ethers } = require("hardhat");
+const fs = require("fs");
 
 async function getUserManagementFixture(multiSig) {
-  const userManagement = await ethers.deployContract("UserManagement", [
-    multiSig,
-  ]);
+  const userManagement = await ethers.deployContract(
+    "UserManagement",
+    [multiSig.address],
+    multiSig
+  );
   return userManagement;
 }
 
 async function getBetManagementFixture(multiSig) {
-  const betManagement = await ethers.deployContract("BetManagement", [
-    multiSig,
-  ]);
+  const betManagement = await ethers.deployContract(
+    "BetManagement",
+    [multiSig.address],
+    multiSig
+  );
   return betManagement;
 }
 
 async function getDataCenterFixture(multiSig, userManagement, betManagement) {
-  const dataCenter = await ethers.deployContract("DataCenter", [
-    multiSig,
-    userManagement,
-    betManagement,
-  ]);
+  const dataCenter = await ethers.deployContract(
+    "DataCenter",
+    [multiSig.address, userManagement, betManagement],
+    multiSig
+  );
   return dataCenter;
 }
 
 async function getTokenFixture(multiSig) {
-  const token = await ethers.deployContract(
-    "MockERC20",
-    ["TestToken", "TTK", 1000000],
-    multiSig
-  );
+  const token = await ethers.deployContract("Vbux", multiSig);
   return token;
 }
 
@@ -47,10 +48,21 @@ function getEventObject(target, events) {
   return event;
 }
 
+function writeToFile(fileName, content) {
+  fs.writeFileSync(fileName, content, (err) => {
+    if (err) {
+      console.error(err);
+      return;
+    }
+    console.log("File has been created successfully!");
+  });
+}
+
 module.exports = {
   getEventObject,
   getUserManagementFixture,
   getBetManagementFixture,
   getDataCenterFixture,
   getTokenFixture,
+  writeToFile,
 };
