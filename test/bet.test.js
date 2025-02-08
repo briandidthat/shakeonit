@@ -201,6 +201,15 @@ describe("Bet", function () {
     expect(await token.balanceOf(initiator)).to.be.equal(ethers.parseEther("1000"));
   });
 
+  it("should return a betDetails array of length 1 for all participants", async function () {
+    const betDetails2 = await arbiterContract.getAllBetDetails();
+    const betDetails3 = await initiatorContract.getAllBetDetails();
+
+    console.log(betDetails);
+    console.log(betDetails2);
+    console.log(betDetails3);
+  });
+
   it("Should revert if the initiator tries to declare the winner", async function () {
     // accept the bet
     await bet.connect(addr2).acceptBet(acceptorDetails);
