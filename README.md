@@ -55,6 +55,16 @@ The `Bet.sol` contract is created by calling the deployBet() function in the bet
 
 - `acceptBet()`
 
+### State Transitions
+```mermaid
+stateDiagram-v2
+    [*] --> INITIATED: deployBet()
+    INITIATED --> FUNDED: acceptBet()
+    FUNDED --> WON: declareWinner()
+    WON --> SETTLED: withdrawEarnings()
+    INITIATED --> CANCELLED: cancelBet()
+```
+
 
 ### Deployments
 #### BASE-SEPOLIA TESTNET:
@@ -63,86 +73,3 @@ The `Bet.sol` contract is created by calling the deployBet() function in the bet
 - Bet Management contract: ```0x021b140B5F931237eD6934B539dE57c111584754```
 - Data Center contract: ```0x934726B886D24fdD98701aF57BedcBCd137870FF```
 - Vbux contract: ```0x9D2A5b0B86a630333eBC02E3cd080Dc60Fe583F9```
-- 
-
-
-
-Let me help create a comprehensive flow diagram for the README. Here's my step-by-step plan:
-
-1. Create complete transaction flow section
-2. Include both bet creation and acceptance flows
-3. Add state transitions
-4. Add clear styling and descriptions
-
-```markdown
-
-
-### Transaction Flow
-
-#### Bet Creation & Acceptance Process
-
-```mermaid
-graph TD
-    subgraph Bet Creation
-        A((Initiator)) -->|1. Deposit| B[UserStorage]
-        A -->|2. Approve| C[BetManagement]
-        B -->|3. Transfer| C
-        C -->|4. Deploy| D[New Bet]
-        D -->|5. Store| E[DataCenter]
-    end
-    
-    subgraph Bet Acceptance
-        F((Acceptor)) -->|6. Deposit| G[UserStorage]
-        F -->|7. Approve| C
-        G -->|8. Transfer| D
-        D -->|9. Update| E
-    end
-    
-    subgraph Resolution
-        H((Arbiter)) -->|10. Declare| D
-        D -->|11. Transfer| Winner
-        D -->|12. Fee| H
-        D -->|13. Platform Fee| MultiSig
-    end
-    
-    style A fill:#98FB98,stroke:#333,stroke-width:2px
-    style F fill:#98FB98,stroke:#333,stroke-width:2px
-    style H fill:#FFA500,stroke:#333,stroke-width:2px
-    style B,G fill:#87CEEB,stroke:#333,stroke-width:2px
-    style C fill:#87CEEB,stroke:#333,stroke-width:2px
-    style D fill:#DDA0DD,stroke:#333,stroke-width:2px
-    style E fill:#FFB6C1,stroke:#333,stroke-width:2px
-```
-
-#### State Transitions
-
-```mermaid
-stateDiagram-v2
-    [*] --> INITIATED: deployBet()
-    INITIATED --> FUNDED: acceptBet()
-    FUNDED --> WON: declareWinner()
-    WON --> SETTLED: withdrawEarnings()
-    INITIATED --> CANCELLED: cancelBet()
-    
-    note right of INITIATED : Bet Created
-    note right of FUNDED : Stakes Locked
-    note right of WON : Winner Declared
-    note right of SETTLED : Funds Distributed
-```
-
-### Key Steps
-1. **Bet Creation (Steps 1-5)**
-   - Initiator deposits funds
-   - BetManagement deploys new bet
-   - Details stored in DataCenter
-   
-2. **Bet Acceptance (Steps 6-9)**
-   - Acceptor matches stake
-   - Funds locked in contract
-   - Bet status updated
-   
-3. **Resolution (Steps 10-13)**
-   - Arbiter declares winner
-   - Funds distributed
-   - Fees processed
-```
