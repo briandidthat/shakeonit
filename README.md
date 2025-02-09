@@ -55,6 +55,16 @@ The `Bet.sol` contract is created by calling the deployBet() function in the bet
 
 - `acceptBet()`
 
+### State Transitions
+```mermaid
+stateDiagram-v2
+    [*] --> INITIATED: deployBet()
+    INITIATED --> FUNDED: acceptBet()
+    FUNDED --> WON: declareWinner()
+    WON --> SETTLED: withdrawEarnings()
+    INITIATED --> CANCELLED: cancelBet()
+```
+
 
 ### Deployments
 #### BASE-SEPOLIA TESTNET:
