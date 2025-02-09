@@ -71,6 +71,12 @@ describe("UserStorage", function () {
     );
   });
 
+  it("Should get all bet details", async function () {
+    const betDetailsArray = await userStorage.getAllBetDetails();
+    expect(betDetailsArray).to.be.an("array");
+    expect(betDetailsArray.length).to.equal(0);
+  });
+
   it("Should revert if unauthorized user tries to deposit", async function () {
     // deposit 1000 tokens to user storage
     await expect(

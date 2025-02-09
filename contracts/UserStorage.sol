@@ -13,7 +13,9 @@ contract UserStorage is IShakeOnIt {
     address private owner;
     address private betManagement;
     address[] public deployedBets;
-    mapping(address => bool) isBet;
+    address[] private tokens;
+    mapping(address => bool) private isBet;
+    mapping(address => bool) private hasToken;
     mapping(address => uint256) public balances;
     mapping(address => BetDetails) public betDetailsRegistry;
 
@@ -50,6 +52,9 @@ contract UserStorage is IShakeOnIt {
             token.transferFrom(msg.sender, address(this), _amount),
             "Transfer failed"
         );
+        if (!hasToken[_token]) {
+            tokens.push(_token);
+        }
         balances[_token] += _amount;
     }
 
@@ -111,18 +116,27 @@ contract UserStorage is IShakeOnIt {
         if (!isBet[betContract]) {
             isBet[betContract] = true;
             deployedBets.push(betContract);
+            if (_betDetails.arbiter.storageAddress != address(this)) {
+                balances[token] -= _betDetails.stake;
+            }
         }
+
         if (_betDetails.status == BetStatus.WON) {
             if (_betDetails.winner == address(this)) {
                 wins++;
                 balances[token] += _betDetails.payout;
             } else if (_betDetails.loser == address(this)) {
+                // we've already updated balance upon creating/accepting bet
                 losses++;
-                balances[token] -= _betDetails.stake;
             } else {
                 balances[token] += _betDetails.arbiterFee;
             }
+        } else if (_betDetails.status == BetStatus.CANCELLED) {
+            if (_betDetails.initiator.storageAddress == address(this)) {
+                balances[token] += _betDetails.stake;
+            }
         }
+
         betDetailsRegistry[betContract] = _betDetails;
         emit BetSaved(betContract, _betDetails.status);
     }
@@ -156,6 +170,18 @@ contract UserStorage is IShakeOnIt {
         address _betContract
     ) external view returns (BetDetails memory) {
         return betDetailsRegistry[_betContract];
+    }
+
+    function getAllBetDetails() external view returns (BetDetails[] memory) {
+        BetDetails[] memory betDetails = new BetDetails[](deployedBets.length);
+        for (uint256 i = 0; i < deployedBets.length; i++) {
+            betDetails[i] = betDetailsRegistry[deployedBets[i]];
+        }
+        return betDetails;
+    }
+
+    function getTokens() external view returns (address[] memory) {
+        return tokens;
     }
 
     /**
