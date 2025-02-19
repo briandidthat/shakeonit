@@ -69,7 +69,7 @@ contract Bet is IShakeOnIt {
      * @dev This function will validate the bet state, stake amount and token address.
      */
     function updateBalance(address _token, uint256 _stake) external {
-        require(msg.sender == address(betManagement), "Restricted to mgmt");
+        require(msg.sender == address(betManagement), "Restricted to bet mgmt");
         require(status == BetStatus.CREATED, "Already Initiated");
         require(_stake == stake, "Invalid stake amount");
         require(_token == address(token), "Invalid token address");
@@ -109,7 +109,7 @@ contract Bet is IShakeOnIt {
         balances[_acceptor.storageAddress] = stake;
         balances[arbiter.storageAddress] = arbiterFee;
         // recieve the stake from the acceptor
-        betManagement.acceptBet();
+        betManagement.acceptBet(_buildBetDetails());
     }
 
     /**
@@ -130,7 +130,7 @@ contract Bet is IShakeOnIt {
         balances[initiator.storageAddress] = 0;
         status = BetStatus.CANCELLED;
         // report the cancellation to the data center
-        betManagement.reportCancellation();
+        betManagement.reportCancellation(_buildBetDetails());
     }
 
     /**
@@ -181,7 +181,7 @@ contract Bet is IShakeOnIt {
         // update the status of the bet
         status = BetStatus.WON;
         // report the winner to the bet management contract
-        betManagement.reportWinnerDeclared();
+        betManagement.reportWinnerDeclared(_buildBetDetails());
     }
 
     function forfeit() external {
@@ -210,7 +210,7 @@ contract Bet is IShakeOnIt {
             "Token transfer failed"
         );
         // report the winner to the bet management contract
-        betManagement.reportWinnerDeclared();
+        betManagement.reportWinnerDeclared(_buildBetDetails());
     }
 
     function withdrawEarnings() external onlyWinner {
@@ -226,7 +226,7 @@ contract Bet is IShakeOnIt {
         // update the status of the bet
         status = BetStatus.SETTLED;
         // report the settlement to the bet management contract
-        betManagement.reportBetSettled();
+        betManagement.reportBetSettled(_buildBetDetails());
     }
 
     // Internal functions

@@ -63,3 +63,42 @@ The `Bet.sol` contract is created by calling the deployBet() function in the bet
 - Bet Management contract: ```0x021b140B5F931237eD6934B539dE57c111584754```
 - Data Center contract: ```0x934726B886D24fdD98701aF57BedcBCd137870FF```
 - Vbux contract: ```0x9D2A5b0B86a630333eBC02E3cd080Dc60Fe583F9```
+
+## Transaction Flow
+
+### Bet Creation & Acceptance Process
+
+```mermaid
+graph TD
+    subgraph Bet Creation
+        A((Initiator)) -->|1. Deposit| B[UserStorage]
+        A -->|2. Approve| C[BetManagement]
+        B -->|3. Transfer| C
+        C -->|4. Deploy| D[New Bet]
+        D -->|5. Store| E[DataCenter]
+    end
+    
+    subgraph Bet Acceptance
+        F((Acceptor)) -->|6. Deposit| G[UserStorage]
+        F -->|7. Approve| C
+        G -->|8. Transfer| D
+        D -->|9. Update| E
+    end
+    
+    subgraph Resolution
+        H((Arbiter)) -->|10. Declare| D
+        D -->|11. Transfer| Winner
+        D -->|12. Fee| H
+        D -->|13. Platform Fee| MultiSig
+    end
+    
+    style A fill:#98FB98,stroke:#333,stroke-width:2px
+    style F fill:#98FB98,stroke:#333,stroke-width:2px
+    style H fill:#FFA500,stroke:#333,stroke-width:2px
+    style B,G fill:#87CEEB,stroke:#333,stroke-width:2px
+    style C fill:#87CEEB,stroke:#333,stroke-width:2px
+    style D fill:#DDA0DD,stroke:#333,stroke-width:2px
+    style E fill:#FFB6C1,stroke:#333,stroke-width:2px
+```
+
+### State Transitions

@@ -2,34 +2,38 @@ const { ethers } = require("hardhat");
 const fs = require("fs");
 
 async function getUserManagementFixture(multiSig) {
-  const userManagement = await ethers.deployContract(
+  let userManagement = await ethers.deployContract(
     "UserManagement",
     [multiSig.address],
     multiSig
   );
+  userManagement = await userManagement.waitForDeployment();
   return userManagement;
 }
 
 async function getBetManagementFixture(multiSig) {
-  const betManagement = await ethers.deployContract(
+  let betManagement = await ethers.deployContract(
     "BetManagement",
     [multiSig.address],
     multiSig
   );
+  betManagement = await betManagement.waitForDeployment();
   return betManagement;
 }
 
 async function getDataCenterFixture(multiSig, userManagement, betManagement) {
-  const dataCenter = await ethers.deployContract(
+  let dataCenter = await ethers.deployContract(
     "DataCenter",
     [multiSig.address, userManagement, betManagement],
     multiSig
   );
+  dataCenter = await dataCenter.waitForDeployment();
   return dataCenter;
 }
 
 async function getTokenFixture(multiSig) {
-  const token = await ethers.deployContract("Vbux", multiSig);
+  let token = await ethers.deployContract("Vbux", multiSig);
+  token = await token.waitForDeployment();
   return token;
 }
 

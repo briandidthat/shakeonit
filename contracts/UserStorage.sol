@@ -16,8 +16,8 @@ contract UserStorage is IShakeOnIt {
     address[] private tokens;
     mapping(address => bool) private isBet;
     mapping(address => bool) private hasToken;
-    mapping(address => uint256) public balances;
-    mapping(address => BetDetails) public betDetailsRegistry;
+    mapping(address => uint256) private balances;
+    mapping(address => BetDetails) private betDetailsRegistry;
 
     event BetSaved(address indexed betContract, BetStatus status);
 
@@ -54,6 +54,9 @@ contract UserStorage is IShakeOnIt {
         );
         if (!hasToken[_token]) {
             tokens.push(_token);
+            hasToken[_token] = true;
+            // approve the bet management contract to spend the token
+            token.approve(betManagement, type(uint256).max);
         }
         balances[_token] += _amount;
     }
@@ -71,32 +74,26 @@ contract UserStorage is IShakeOnIt {
     }
 
     /**
-     * @dev Grant approval to a spender
+     * @dev Grant approval to a the bet management contract to spend a token
      * @param _token address of the token
-     * @param _spender address of the spender (the bet management contract)
      * @param _amount amount to approve
      */
-    function grantApproval(
-        address _token,
-        address _spender,
-        uint256 _amount
-    ) external onlyOwner {
+    function grantApproval(address _token, uint256 _amount) external onlyOwner {
         require(_amount > 0, "Amount must be greater than 0");
         // approve the spender to spend the amount
-        IERC20(_token).approve(_spender, _amount);
+        require(
+            IERC20(_token).approve(betManagement, _amount),
+            "Approval failed"
+        );
     }
 
     /**
-     * @dev Revoke approval to a spender
+     * @dev Revoke approval to a the bet management contract to spend a token
      * @param _token address of the token
-     * @param _spender address of the spender
      */
-    function revokeApproval(
-        address _token,
-        address _spender
-    ) external onlyOwner {
+    function revokeApproval(address _token) external onlyOwner {
         // set the approval to 0
-        IERC20(_token).approve(_spender, 0);
+        IERC20(_token).approve(betManagement, 0);
     }
 
     /**
@@ -112,27 +109,30 @@ contract UserStorage is IShakeOnIt {
     function saveBet(BetDetails memory _betDetails) external onlyBetManagement {
         address betContract = _betDetails.betContract;
         address token = _betDetails.token;
+        address storageAddr = address(this);
+        uint256 tokenBalance = balances[token];
 
         if (!isBet[betContract]) {
             isBet[betContract] = true;
             deployedBets.push(betContract);
-            if (_betDetails.arbiter.storageAddress != address(this)) {
-                balances[token] -= _betDetails.stake;
+            if (_betDetails.arbiter.storageAddress != storageAddr) {
+                balances[token] = tokenBalance - _betDetails.stake;
             }
         }
 
         if (_betDetails.status == BetStatus.WON) {
-            if (_betDetails.winner == address(this)) {
+            if (_betDetails.winner == storageAddr) {
                 wins++;
-                balances[token] += _betDetails.payout;
-            } else if (_betDetails.loser == address(this)) {
+                balances[token] = tokenBalance + _betDetails.payout;
+            } else if (_betDetails.loser == storageAddr) {
                 // we've already updated balance upon creating/accepting bet
                 losses++;
-            } else {
-                balances[token] += _betDetails.arbiterFee;
+            } else if (_betDetails.arbiter.storageAddress == storageAddr) {
+                // update with arbiter fee
+                balances[token] = tokenBalance + _betDetails.arbiterFee;
             }
         } else if (_betDetails.status == BetStatus.CANCELLED) {
-            if (_betDetails.initiator.storageAddress == address(this)) {
+            if (_betDetails.initiator.storageAddress == storageAddr) {
                 balances[token] += _betDetails.stake;
             }
         }
@@ -162,7 +162,7 @@ contract UserStorage is IShakeOnIt {
         return losses;
     }
 
-    function getAllBets() external view returns (address[] memory) {
+    function getBets() external view returns (address[] memory) {
         return deployedBets;
     }
 
@@ -170,14 +170,6 @@ contract UserStorage is IShakeOnIt {
         address _betContract
     ) external view returns (BetDetails memory) {
         return betDetailsRegistry[_betContract];
-    }
-
-    function getAllBetDetails() external view returns (BetDetails[] memory) {
-        BetDetails[] memory betDetails = new BetDetails[](deployedBets.length);
-        for (uint256 i = 0; i < deployedBets.length; i++) {
-            betDetails[i] = betDetailsRegistry[deployedBets[i]];
-        }
-        return betDetails;
     }
 
     function getTokens() external view returns (address[] memory) {
