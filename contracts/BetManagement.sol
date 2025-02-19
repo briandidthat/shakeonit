@@ -14,8 +14,7 @@ contract BetManagement is IShakeOnIt, Restricted {
     event BetCreated(
         address indexed betAddress,
         address indexed initiator,
-        address indexed arbiter,
-        address token,
+        address indexed token,
         uint256 stake
     );
 
@@ -23,6 +22,9 @@ contract BetManagement is IShakeOnIt, Restricted {
     event BetAccepted(address indexed betAddress, address indexed acceptor);
     event BetWon(
         address indexed betAddress,
+        address indexed winner,
+        address indexed arbiter,
+        uint256 payout,
         uint256 arbiterFee,
         uint256 platformFee
     );
@@ -124,13 +126,7 @@ contract BetManagement is IShakeOnIt, Restricted {
         UserStorage(_initiator.storageAddress).saveBet(betDetails);
         UserStorage(_arbiter.storageAddress).saveBet(betDetails);
         // emit BetCreated event
-        emit BetCreated(
-            betAddress,
-            _initiator.storageAddress,
-            _arbiter.storageAddress,
-            _token,
-            _stake
-        );
+        emit BetCreated(betAddress, _initiator.storageAddress, _token, _stake);
 
         return betAddress;
     }
@@ -138,8 +134,9 @@ contract BetManagement is IShakeOnIt, Restricted {
     /**
      * @notice Accepts the bet and funds the escrow.
      */
-    function acceptBet() external hasCorrectRole(BET_CONTRACT_ROLE) {
-        BetDetails memory betDetails = Bet(msg.sender).getBetDetails();
+    function acceptBet(
+        BetDetails memory betDetails
+    ) external hasCorrectRole(BET_CONTRACT_ROLE) {
         // fund the bet contract
         require(
             IERC20(betDetails.token).transferFrom(
@@ -158,24 +155,43 @@ contract BetManagement is IShakeOnIt, Restricted {
     }
 
     /**
-     * @notice Declares the winner of the bet and transfers the funds to the winner.
+     * @notice Reports that a winner has been declared for a bet and updates storage
+     * @dev Can only be called by addresses with BET_CONTRACT_ROLE
+     * @param betDetails The details of the bet including initiator, acceptor, arbiter, and payment info
+     * @custom:events Emits BetWon event with payment details
      */
-    function reportWinnerDeclared() external hasCorrectRole(BET_CONTRACT_ROLE) {
-        BetDetails memory betDetails = Bet(msg.sender).getBetDetails();
-        // update the bet for all parties (msg.sender will be the contract address)
+    function reportWinnerDeclared(
+        BetDetails memory betDetails
+    ) external hasCorrectRole(BET_CONTRACT_ROLE) {
+        // update the bet for all parties
         UserStorage(betDetails.initiator.storageAddress).saveBet(betDetails);
         UserStorage(betDetails.acceptor.storageAddress).saveBet(betDetails);
         UserStorage(betDetails.arbiter.storageAddress).saveBet(betDetails);
         // emit BetWon event
-        emit BetWon(msg.sender, betDetails.arbiterFee, betDetails.platformFee);
+        emit BetWon(
+            msg.sender,
+            betDetails.winner,
+            betDetails.arbiter.storageAddress,
+            betDetails.payout,
+            betDetails.arbiterFee,
+            betDetails.platformFee
+        );
     }
 
-    function reportBetSettled() external hasCorrectRole(BET_CONTRACT_ROLE) {
-        BetDetails memory betDetails = Bet(msg.sender).getBetDetails();
-        // update the bet for all parties (msg.sender will be the contract address)
+    /**
+     * @notice Reports that a bet has been settled and updates storage
+     * @dev Can only be called by addresses with BET_CONTRACT_ROLE
+     * @param betDetails The details of the bet including initiator, acceptor, arbiter, and payment info
+     * @custom:events Emits BetSettled event with token and payout details
+     */
+    function reportBetSettled(
+        BetDetails memory betDetails
+    ) external hasCorrectRole(BET_CONTRACT_ROLE) {
+        // update the bet for all parties
         UserStorage(betDetails.initiator.storageAddress).saveBet(betDetails);
         UserStorage(betDetails.acceptor.storageAddress).saveBet(betDetails);
         UserStorage(betDetails.arbiter.storageAddress).saveBet(betDetails);
+
         // remove the BET_CONTRACT_ROLE from the bet contract
         _revokeRole(BET_CONTRACT_ROLE, msg.sender);
         // emit BetSettled event
@@ -185,8 +201,9 @@ contract BetManagement is IShakeOnIt, Restricted {
     /**
      * @notice Cancels the bet and updates the state.
      */
-    function reportCancellation() external hasCorrectRole(BET_CONTRACT_ROLE) {
-        BetDetails memory betDetails = Bet(msg.sender).getBetDetails();
+    function reportCancellation(
+        BetDetails memory betDetails
+    ) external hasCorrectRole(BET_CONTRACT_ROLE) {
         // update the bet for initiator and arbiter (acceptor is not updated atp)
         UserStorage(betDetails.initiator.storageAddress).saveBet(betDetails);
         UserStorage(betDetails.arbiter.storageAddress).saveBet(betDetails);
