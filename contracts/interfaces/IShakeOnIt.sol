@@ -30,4 +30,15 @@ interface IShakeOnIt {
         uint256 payout;
         BetStatus status;
     }
+
+    struct BetRequest {
+        address token;
+        UserDetails initiator;
+        UserDetails arbiter;
+        uint256 stake;
+        uint256 arbiterFee;
+        uint256 platformFee;
+        uint256 payout;
+        string condition;
+    }
 }

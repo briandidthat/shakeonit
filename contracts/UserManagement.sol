@@ -18,7 +18,11 @@ contract UserManagement is Restricted {
     }
 
     // event to be emitted when a new user is added
-    event UserAdded(address indexed user, address indexed userStorage);
+    event UserAdded(
+        address indexed user,
+        address indexed userStorage,
+        string username
+    );
 
     constructor(address _multiSig) {
         // grant the default admin role to the multiSig address
@@ -53,7 +57,7 @@ contract UserManagement is Restricted {
             storageAddress: userStorageAddress
         });
         // emit UserAdded event
-        emit UserAdded(msg.sender, userStorageAddress);
+        emit UserAdded(msg.sender, userStorageAddress, _username);
 
         return address(userStorage);
     }

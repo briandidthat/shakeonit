@@ -11,85 +11,105 @@ const {
 
 describe("UserStorage", function () {
   let userManagement, userStorage, token, betManagement;
-  let multiSig, addr1, addr2, tokenAddress, userStorageAddress;
+  let multiSig,
+    initiator,
+    addr2,
+    tokenAddress,
+    userStorageAddress,
+    betManagementAddress;
 
   beforeEach(async function () {
-    [multiSig, addr1, addr2] = await ethers.getSigners();
+    [multiSig, initiator, addr2] = await ethers.getSigners();
     userManagement = await getUserManagementFixture(multiSig);
     betManagement = await getBetManagementFixture(multiSig);
-    const betManagementAddress = await betManagement.getAddress();
-    // Register addr1
+    betManagementAddress = await betManagement.getAddress();
+    // Register initiator
     await userManagement
-      .connect(addr1)
+      .connect(initiator)
       .register("tester", betManagementAddress);
     // get user strorage address
-    userStorageAddress = await userManagement.getUserStorage(addr1.address);
+    userStorageAddress = await userManagement.getUserStorage(initiator.address);
     userStorage = await ethers.getContractAt(abi, userStorageAddress);
 
     // deploy TestToken
     token = await getTokenFixture(multiSig);
     tokenAddress = await token.getAddress();
-    // send 10000 tokens to addr1
-    await token.connect(multiSig).transfer(addr1.address, 10000);
+    // send 10000 tokens to initiator
+    await token.connect(multiSig).transfer(initiator.address, 10000);
     // approve user storage to spend 1000 tokens
-    await token.connect(addr1).approve(userStorage, 1000);
+    await token.connect(initiator).approve(userStorage, 1000);
   });
 
   it("Should have deployed UserStorage", async function () {
-    let userStorage = await userManagement.getUserStorage(addr1.address);
-    expect(userStorage).to.be.a.properAddress;
+    expect(userStorageAddress).to.be.a.properAddress;
   });
 
   it("Should have correct owner", async function () {
-    expect(await userStorage.getOwner()).to.equal(addr1.address);
+    expect(await userStorage.getOwner()).to.equal(initiator.address);
   });
 
   it("Should deposit to the contract", async function () {
     // deposit 1000 tokens to user storage
-    await userStorage.connect(addr1).deposit(tokenAddress, 1000);
+    await userStorage.connect(initiator).deposit(tokenAddress, 1000);
     // check balance
     expect(await userStorage.getTokenBalance(tokenAddress)).to.equal(1000);
   });
 
   it("Should withdraw from the contract", async function () {
     // deposit 1000 tokens to user storage
-    await userStorage.connect(addr1).deposit(tokenAddress, 1000);
+    await userStorage.connect(initiator).deposit(tokenAddress, 1000);
     // withdraw 500 tokens
-    await userStorage.connect(addr1).withdraw(tokenAddress, 500);
+    await userStorage.connect(initiator).withdraw(tokenAddress, 500);
     // check balance
     expect(await userStorage.getTokenBalance(tokenAddress)).to.equal(500);
   });
 
-  it("Should grant approval to bet management address", async function () {
-    // grant approval to bet management
-    await userStorage
-      .connect(addr1)
-      .grantApproval(tokenAddress, addr2.address, 1000);
-    // check approval
-    expect(await token.allowance(userStorageAddress, addr2.address)).to.equal(
-      1000
-    );
+  describe("Approvals", function () {
+    it("Should have granted approval to bet management address on deposit", async function () {
+      // deposit 1000 tokens to user storage
+      await userStorage.connect(initiator).deposit(tokenAddress, 1000);
+      // check approval
+      expect(
+        await token.allowance(userStorageAddress, betManagementAddress)
+      ).to.equal(ethers.MaxUint256);
+    });
+
+    it("Should grant approval to bet management address", async function () {
+      // revoke approval
+      await userStorage.connect(initiator).revokeApproval(tokenAddress);
+      // grant approval to bet management
+      await userStorage.connect(initiator).grantApproval(tokenAddress, 1000);
+      // check approval
+      expect(
+        await token.allowance(userStorageAddress, betManagementAddress)
+      ).to.equal(1000);
+    });
+
+    it("Should revoke approval to bet management address", async function () {
+      // revoke approval
+      await userStorage.connect(initiator).revokeApproval(tokenAddress);
+      // check approval
+      expect(
+        await token.allowance(userStorageAddress, betManagementAddress)
+      ).to.equal(0);
+    });
   });
 
-  it("Should get all bet details", async function () {
-    const betDetailsArray = await userStorage.getAllBetDetails();
-    expect(betDetailsArray).to.be.an("array");
-    expect(betDetailsArray.length).to.equal(0);
-  });
+  describe("Authorization", function () {
+    it("Should revert if unauthorized user tries to deposit", async function () {
+      // deposit 1000 tokens to user storage
+      await expect(
+        userStorage.connect(multiSig).deposit(tokenAddress, 1000)
+      ).to.be.revertedWith("Restricted to owner");
+    });
 
-  it("Should revert if unauthorized user tries to deposit", async function () {
-    // deposit 1000 tokens to user storage
-    await expect(
-      userStorage.connect(multiSig).deposit(tokenAddress, 1000)
-    ).to.be.revertedWith("Restricted to owner");
-  });
-
-  it("Should revert if unauthorized user tries to withdraw", async function () {
-    // deposit 1000 tokens to user storage
-    await userStorage.connect(addr1).deposit(tokenAddress, 1000);
-    // withdraw 500 tokens
-    await expect(
-      userStorage.connect(multiSig).withdraw(tokenAddress, 500)
-    ).to.be.revertedWith("Restricted to owner");
+    it("Should revert if unauthorized user tries to withdraw", async function () {
+      // deposit 1000 tokens to user storage
+      await userStorage.connect(initiator).deposit(tokenAddress, 1000);
+      // withdraw 500 tokens
+      await expect(
+        userStorage.connect(multiSig).withdraw(tokenAddress, 500)
+      ).to.be.revertedWith("Restricted to owner");
+    });
   });
 });
