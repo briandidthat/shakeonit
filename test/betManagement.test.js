@@ -39,29 +39,28 @@ describe("BetManagement", function () {
       .register("arbiter", betManagementAddress);
 
     // get user storage addresses
-    let initiatorContractAddress = await userManagement.getUserStorage(
+    const initiatorContractAddress = await userManagement.getUserStorage(
       initiator.address
     );
+    const arbiterContractAddress = await userManagement.getUserStorage(
+      arbiter.address
+    );
+    // create pointer for user storage contract
+    initiatorContract = new ethers.Contract(
+      initiatorContractAddress,
+      abi,
+      initiator
+    );
+
     // create user details object
     initiatorDetails = {
       owner: initiator.address,
       storageAddress: initiatorContractAddress,
     };
-
-    const arbiterContractAddress = await userManagement.getUserStorage(
-      arbiter.address
-    );
-
     arbiterDetails = {
       owner: arbiter.address,
       storageAddress: arbiterContractAddress,
     };
-
-    // create pointer to user storage contract
-    initiatorContract = await ethers.getContractAt(
-      abi,
-      initiatorContractAddress
-    );
 
     // send 1000 tokens to initiator
     await token
@@ -85,18 +84,16 @@ describe("BetManagement", function () {
 
   it("Should create a bet", async function () {
     // deploy the bet
-    await betManagement
-      .connect(initiator)
-      .deployBet(
-        tokenAddress,
-        initiatorDetails,
-        arbiterDetails,
-        ethers.parseEther("1000"),
-        ethers.parseEther("50"),
-        ethers.parseEther("50"),
-        ethers.parseEther("1900"),
-        "Condition"
-      );
+    await betManagement.connect(initiator).deployBet({
+      token: tokenAddress,
+      initiator: initiatorDetails,
+      arbiter: arbiterDetails,
+      stake: ethers.parseEther("1000"),
+      arbiterFee: ethers.parseEther("50"),
+      platformFee: ethers.parseEther("50"),
+      payout: ethers.parseEther("1900"),
+      condition: "Condition",
+    });
     // get the bet count
     let betCount = await betManagement.getBetCount();
 
