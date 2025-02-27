@@ -7,64 +7,61 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./DataCenter.sol";
 
 contract Bet is IShakeOnIt {
-    UserDetails private initiator;
-    UserDetails private acceptor;
-    UserDetails private arbiter;
-    UserDetails private winner;
-    UserDetails private loser;
+    User private creator;
+    User private challenger;
+    User private arbiter;
+    User private winner;
+    User private loser;
     uint256 private stake;
     uint256 private arbiterFee;
     uint256 private platformFee;
     uint256 private payout;
     string private condition;
+    BetType private betType;
     BetStatus private status;
     BetManagement private betManagement;
     IERC20 private token;
     mapping(address => uint256) private balances;
 
     modifier onlyArbiter() {
-        require(msg.sender == arbiter.owner, "Restricted to arbiter");
+        require(msg.sender == arbiter.signer, "Restricted to arbiter");
         _;
     }
 
-    modifier onlyInitiator() {
-        require(msg.sender == initiator.owner, "Restricted to initiator");
+    modifier onlyCreator() {
+        require(msg.sender == creator.signer, "Restricted to creator");
         _;
     }
 
     modifier onlyWinner() {
-        require(msg.sender == winner.owner, "Restricted to winner");
+        require(msg.sender == winner.signer, "Restricted to winner");
         _;
     }
 
-    constructor(
-        address _token,
-        UserDetails memory _initiator,
-        UserDetails memory _arbiter,
-        uint256 _stake,
-        uint256 _arbiterFee,
-        uint256 _platformFee,
-        uint256 _payout,
-        string memory _condition
-    ) {
-        betManagement = BetManagement(msg.sender);
-        token = IERC20(_token);
-        initiator = _initiator;
-        arbiter = _arbiter;
-        stake = _stake;
-        arbiterFee = _arbiterFee;
-        platformFee = _platformFee;
-        payout = _payout;
+    constructor(BetRequest memory _betRequest) {
+        betType = _betRequest.betType; // 0 for OPEN, 1 for PRIVATE
+        token = IERC20(_betRequest.token);
+        creator = _betRequest.creator;
+        arbiter = _betRequest.arbiter;
+        stake = _betRequest.stake;
+        arbiterFee = _betRequest.arbiterFee;
+        platformFee = _betRequest.platformFee;
+        payout = _betRequest.payout;
         status = BetStatus.CREATED;
-        condition = _condition;
+        condition = _betRequest.condition;
+        if (_betRequest.betType == BetType.PRIVATE_BET) {
+            challenger = _betRequest.challenger;
+        }
+
+        betManagement = BetManagement(msg.sender);
     }
 
     // External functions
 
     /**
-     * @notice Updates the balance of the initiator after deployment. Will only be called once.
+     * @notice Updates the balance of the creator after deployment. Will only be called once.
      * @param _token The address of the token contract
-     * @param _stake The amount of stake to be funded by the initiator
+     * @param _stake The amount of stake to be funded by the creator
      * @dev This function can only be called by the BetManagement contract
      * @dev This function will validate the bet state, stake amount and token address.
      */
@@ -76,58 +73,67 @@ contract Bet is IShakeOnIt {
 
         // update the status of the bet
         status = BetStatus.INITIATED;
-        // update balance of the initiator
-        balances[initiator.storageAddress] = _stake;
+        // update balance of the creator
+        balances[creator.userContract] = _stake;
     }
 
     /**
      * @notice Accepts the bet and funds the escrow.
      */
-    function acceptBet(UserDetails memory _acceptor) external {
-        // validate the acceptor is not the initiator or arbiter
-        require(msg.sender == _acceptor.owner, "Mismatch in acceptor address");
+    function acceptBet(User memory _acceptor) external {
+        if (betType == BetType.PRIVATE_BET) {
+            require(
+                msg.sender == challenger.signer,
+                "Only the challenger can accept the bet"
+            );
+        }
+        // validate the challenger is not the creator or arbiter
         require(
-            msg.sender != initiator.owner,
+            msg.sender == _acceptor.signer,
+            "Mismatch in challenger address"
+        );
+        require(
+            msg.sender != creator.signer,
             "Initiator cannot accept the bet"
         );
-        require(msg.sender != arbiter.owner, "Arbiter cannot accept the bet");
+        require(msg.sender != arbiter.signer, "Arbiter cannot accept the bet");
         // validate the status of the bet
         require(
             status == BetStatus.INITIATED,
             "Bet must be in initiated status"
         );
         require(
-            balances[_acceptor.storageAddress] == 0,
+            balances[_acceptor.userContract] == 0,
             "Participant has already funded the escrow"
         );
 
-        // update the acceptor
-        acceptor = _acceptor;
+        // update the challenger
+        challenger = _acceptor;
         // update the status of the bet
         status = BetStatus.FUNDED;
-        // update the balance of the acceptor
-        balances[_acceptor.storageAddress] = stake;
-        balances[arbiter.storageAddress] = arbiterFee;
-        // recieve the stake from the acceptor
+        // update the balance of the challenger
+        balances[_acceptor.userContract] = stake;
+        balances[arbiter.userContract] = arbiterFee;
+        // recieve the stake from the challenger
         betManagement.acceptBet(_buildBetDetails());
     }
 
     /**
-     * @notice Cancels the bet and refunds the initiator.
-     * @dev This function can only be called by the initiator.
+     * @notice Cancels the bet and refunds the creator.
+     * @dev This function can only be called by the creator.
      */
-    function cancelBet() external onlyInitiator {
+    function cancelBet() external onlyCreator {
         require(
             status == BetStatus.CREATED || status == BetStatus.INITIATED,
             "Bet must be in initiated status"
         );
         require(
-            token.transfer(initiator.storageAddress, stake),
+            token.transfer(creator.userContract, stake),
             "Token transfer failed"
         );
 
-        // update the balance of the initiator
-        balances[initiator.storageAddress] = 0;
+        // update the balance of the creator
+        balances[creator.userContract] = 0;
         status = BetStatus.CANCELLED;
         // report the cancellation to the data center
         betManagement.reportCancellation(_buildBetDetails());
@@ -137,25 +143,24 @@ contract Bet is IShakeOnIt {
      * @notice Declares the winner of the bet and pays the arbiter.
      * @dev This function can only be called by the arbiter.
      * @param _winner The address of the participant who is declared the winner.
-     * @param _loser The address of the participant who is declared the loser.
      */
-    function declareWinner(
-        UserDetails memory _winner,
-        UserDetails memory _loser
-    ) external onlyArbiter {
+    function declareWinner(User memory _winner) external onlyArbiter {
         // validate the status of the bet
         require(status == BetStatus.FUNDED, "Bet has not been funded yet");
+
+        address winnerAddress = _winner.userContract;
+        address arbiterAddress = arbiter.userContract;
+
         // validate the participants
         require(
-            _winner.storageAddress == initiator.storageAddress ||
-                _winner.storageAddress == acceptor.storageAddress,
+            winnerAddress == creator.userContract ||
+                winnerAddress == challenger.userContract,
             "Invalid winner"
         );
-        require(
-            _loser.storageAddress == initiator.storageAddress ||
-                _loser.storageAddress == acceptor.storageAddress,
-            "Invalid loser"
-        );
+        // validate the loser
+        User memory _loser = winnerAddress == creator.userContract
+            ? challenger
+            : creator;
 
         // get the multiSig wallet address
         address multiSigWallet = betManagement.getMultiSig();
@@ -167,14 +172,14 @@ contract Bet is IShakeOnIt {
         );
         // transfer the arbiter fee to the arbiter
         require(
-            token.transfer(arbiter.storageAddress, arbiterFee),
+            token.transfer(arbiterAddress, arbiterFee),
             "Token transfer to arbiter failed"
         );
         // update the balance of the arbiter
-        balances[arbiter.storageAddress] = 0;
+        balances[arbiterAddress] = 0;
         // update the balance of the participants
-        balances[_winner.storageAddress] = payout;
-        balances[_loser.storageAddress] = 0;
+        balances[winnerAddress] = payout;
+        balances[_loser.userContract] = 0;
         // assign the winner and loser
         winner = _winner;
         loser = _loser;
@@ -187,20 +192,20 @@ contract Bet is IShakeOnIt {
     function forfeit() external {
         require(status == BetStatus.FUNDED, "Bet must be in funded state");
         require(
-            msg.sender == initiator.owner || msg.sender == acceptor.owner,
+            msg.sender == creator.signer || msg.sender == challenger.signer,
             "Only participants can forfeit"
         );
 
-        if (msg.sender == initiator.owner) {
-            winner = acceptor;
-            balances[initiator.storageAddress] = 0;
-            balances[acceptor.storageAddress] = payout + arbiterFee;
+        if (msg.sender == creator.signer) {
+            winner = challenger;
+            balances[creator.userContract] = 0;
+            balances[challenger.userContract] = payout + arbiterFee;
         } else {
-            winner = initiator;
-            balances[initiator.storageAddress] = 0;
-            balances[acceptor.storageAddress] = payout + arbiterFee;
+            winner = creator;
+            balances[creator.userContract] = 0;
+            balances[challenger.userContract] = payout + arbiterFee;
         }
-        balances[arbiter.storageAddress] = 0;
+        balances[arbiter.userContract] = 0;
 
         // get the multiSig wallet address
         address multiSigWallet = betManagement.getMultiSig();
@@ -215,14 +220,13 @@ contract Bet is IShakeOnIt {
 
     function withdrawEarnings() external onlyWinner {
         require(status == BetStatus.WON, "Bet has not been declared won yet");
-        require(balances[winner.storageAddress] > 0, "No funds to withdraw");
+
+        address winnerAddress = winner.userContract;
+        require(balances[winnerAddress] > 0, "No funds to withdraw");
         // transfer the funds to the winner
-        require(
-            token.transfer(winner.storageAddress, payout),
-            "Token transfer failed"
-        );
+        require(token.transfer(winnerAddress, payout), "Token transfer failed");
         // update the balance of the participant
-        balances[winner.storageAddress] = 0;
+        balances[winnerAddress] = 0;
         // update the status of the bet
         status = BetStatus.SETTLED;
         // report the settlement to the bet management contract
@@ -234,18 +238,19 @@ contract Bet is IShakeOnIt {
     function _buildBetDetails() internal view returns (BetDetails memory) {
         return
             BetDetails({
+                betType: betType,
+                status: status,
                 betContract: address(this),
                 token: address(token),
-                initiator: initiator,
-                arbiter: arbiter,
-                acceptor: acceptor,
-                winner: winner.storageAddress,
-                loser: loser.storageAddress,
+                creator: creator.userContract,
+                arbiter: arbiter.userContract,
+                challenger: challenger.userContract,
+                winner: winner.userContract,
+                loser: loser.userContract,
                 stake: stake,
                 arbiterFee: arbiterFee,
                 platformFee: platformFee,
-                payout: payout,
-                status: status
+                payout: payout
             });
     }
 
@@ -256,15 +261,15 @@ contract Bet is IShakeOnIt {
     }
 
     function getArbiter() external view returns (address) {
-        return arbiter.storageAddress;
+        return arbiter.userContract;
     }
 
-    function getInitiator() external view returns (address) {
-        return initiator.storageAddress;
+    function getCreator() external view returns (address) {
+        return creator.userContract;
     }
 
-    function getAcceptor() external view returns (address) {
-        return acceptor.storageAddress;
+    function getChallenger() external view returns (address) {
+        return challenger.userContract;
     }
 
     function getStake() external view returns (uint256) {
@@ -273,12 +278,12 @@ contract Bet is IShakeOnIt {
 
     function getWinner() external view returns (address) {
         require(status != BetStatus.INITIATED, "Bet has not been declared yet");
-        return winner.storageAddress;
+        return winner.userContract;
     }
 
     function getLoser() external view returns (address) {
         require(status != BetStatus.INITIATED, "Bet has not been declared yet");
-        return loser.storageAddress;
+        return loser.userContract;
     }
 
     function getAmount() external view returns (uint256) {

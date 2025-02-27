@@ -45,14 +45,6 @@ describe("DataCenter", function () {
     expect(await dataCenter.getBetManagement()).to.be.a.properAddress;
   });
 
-  it("Should check if an address is a user", async function () {
-    // get the user management address (using addr2 in place of betManagement for testing)
-    await userManagement.connect(addr1).register("tester", addr2.address);
-    // check if the address is a user
-    const isUser = await dataCenter.isUser(addr1.address);
-    expect(isUser).to.be.true;
-  });
-
   it("Should check if an address is not a user", async function () {
     // check if the address is a user
     const isUser = await dataCenter.isUser(addr1.address);

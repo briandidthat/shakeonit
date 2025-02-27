@@ -2,39 +2,26 @@
 pragma solidity ^0.8.0;
 
 import "./UserStorage.sol";
-import "./DataCenter.sol";
-import "./Restricted.sol";
+import "./interfaces/IShakeOnIt.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract UserManagement is Restricted {
-    address public multisig;
+contract UserManagement is IShakeOnIt, Ownable {
     address[] public users;
     address[] public userStorageContracts;
     mapping(address => bool) public isUser;
-    mapping(address => UserDetails) public userDetailsRegistry;
-
-    struct UserDetails {
-        address owner;
-        address storageAddress;
-    }
+    mapping(address => User) public userRegistry;
 
     // event to be emitted when a new user is added
     event UserAdded(
         address indexed user,
         address indexed userStorage,
-        string username
+        bytes32 username
     );
 
-    constructor(address _multiSig) {
-        // grant the default admin role to the multiSig address
-        _grantRole(DEFAULT_ADMIN_ROLE, _multiSig);
-        // set the owner role to the multiSig address
-        _grantRole(MULTISIG_ROLE, _multiSig);
-        // set the multisig address
-        multisig = _multiSig;
-    }
+    constructor(address _multiSig) Ownable(_multiSig) {}
 
     function register(
-        string memory _username,
+        bytes32 _username,
         address _betManagement
     ) external returns (address) {
         require(!isUser[msg.sender], "User already registered");
@@ -52,9 +39,10 @@ contract UserManagement is Restricted {
         // set isUser to true
         isUser[msg.sender] = true;
         // store the user
-        userDetailsRegistry[msg.sender] = UserDetails({
-            owner: msg.sender,
-            storageAddress: userStorageAddress
+        userRegistry[msg.sender] = User({
+            signer: msg.sender,
+            username: _username,
+            userContract: userStorageAddress
         });
         // emit UserAdded event
         emit UserAdded(msg.sender, userStorageAddress, _username);
@@ -62,27 +50,17 @@ contract UserManagement is Restricted {
         return address(userStorage);
     }
 
-    function setNewMultiSig(
-        address _newMultiSig
-    ) external onlyRole(MULTISIG_ROLE) {
-        _grantRole(DEFAULT_ADMIN_ROLE, _newMultiSig);
-        _grantRole(MULTISIG_ROLE, _newMultiSig);
-        _revokeRole(MULTISIG_ROLE, msg.sender);
-
-        multisig = _newMultiSig;
+    function setNewMultiSig(address _newMultiSig) external onlyOwner {
+        _transferOwnership(_newMultiSig);
     }
 
     function getMultiSig() external view returns (address) {
-        return multisig;
+        return owner();
     }
 
-    /**
-     * @dev Get the user storage contract address for a user
-     * @param _user The address of the user
-     */
-    function getUserStorage(address _user) external view returns (address) {
+    function getUser(address _user) external view returns (User memory) {
         require(isUser[_user], "User not registered");
-        return userDetailsRegistry[_user].storageAddress;
+        return userRegistry[_user];
     }
 
     /**
