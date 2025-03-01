@@ -162,16 +162,15 @@ describe("Bet", function () {
       // assert
       expect(betDetails.betContract).to.be.equal(privateBetAddress);
       expect(betDetails.token).to.be.equal(tokenAddress);
-      expect(betDetails.creator).to.be.equal(creatorObject);
-      expect(betDetails.arbiter).to.be.equal(arbiterObject);
+      expect(betDetails.creator).to.be.equal(creatorObject.userContract);
+      expect(betDetails.arbiter).to.be.equal(arbiterObject.userContract);
       expect(betDetails.challenger).to.be.equal(
-        challengerObject.storageAddress
+        challengerObject.userContract
       );
       expect(betDetails.stake).to.be.equal(ethers.parseEther("1000"));
       expect(betDetails.payout).to.be.equal(ethers.parseEther("1900"));
       expect(betDetails.platformFee).to.be.equal(ethers.parseEther("50"));
       expect(betDetails.arbiterFee).to.be.equal(ethers.parseEther("50"));
-      expect(betDetails.condition).to.be.equal("Condition");
       expect(betDetails.status).to.be.equal(1);
       expect(betDetails.betType).to.be.equal(BET_TYPES.PRIVATE);
     });
@@ -180,12 +179,12 @@ describe("Bet", function () {
       // accept the bet
       await privateBet.connect(challenger).acceptBet(challengerObject);
       // assert
-      expect(await token.balanceOf(privateBet.address)).to.be.equal(
+      expect(await token.balanceOf(privateBetAddress)).to.be.equal(
         ethers.parseEther("2000")
       );
       expect(await privateBet.getStatus()).to.be.equal(2);
       expect(await privateBet.getChallenger()).to.be.equal(
-        challengerObject.storageAddress
+        challengerObject.userContract
       );
       expect(await challengerContract.getBets()).to.be.lengthOf(1);
     });
@@ -193,8 +192,8 @@ describe("Bet", function () {
 
   it("Should have the correct bet details", async function () {
     // assert
-    expect(await bet.getCreator()).to.be.equal(creatorObject.storageAddress);
-    expect(await bet.getArbiter()).to.be.equal(arbiterObject.storageAddress);
+    expect(await bet.getCreator()).to.be.equal(creatorObject.userContract);
+    expect(await bet.getArbiter()).to.be.equal(arbiterObject.userContract);
     expect(await bet.getStake()).to.be.equal(ethers.parseEther("1000"));
     expect(await bet.getPayout()).to.be.equal(ethers.parseEther("1900"));
     expect(await bet.getPlatformFee()).to.be.equal(ethers.parseEther("50"));
@@ -232,7 +231,7 @@ describe("Bet", function () {
     );
     expect(await bet.getStatus()).to.be.equal(2);
     expect(await bet.getChallenger()).to.be.equal(
-      challengerObject.storageAddress
+      challengerObject.userContract
     );
     expect(await challengerContract.getBets()).to.be.lengthOf(1);
   });
@@ -244,8 +243,8 @@ describe("Bet", function () {
     await bet.connect(arbiter).declareWinner(challengerObject);
     // assert
     expect(await bet.getStatus()).to.be.equal(3);
-    expect(await bet.getWinner()).to.be.equal(challengerObject.storageAddress);
-    expect(await bet.getLoser()).to.be.equal(creatorObject);
+    expect(await bet.getWinner()).to.be.equal(challengerObject.userContract);
+    expect(await bet.getLoser()).to.be.equal(creatorObject.userContract);
     expect(await token.balanceOf(betAddress)).to.be.equal(
       ethers.parseEther("1900")
     );
@@ -260,10 +259,10 @@ describe("Bet", function () {
     await bet.connect(challenger).withdrawEarnings();
     // assert
     expect(await bet.getStatus()).to.be.equal(4);
-    expect(await token.balanceOf(challengerObject.storageAddress)).to.be.equal(
+    expect(await token.balanceOf(challengerObject.userContract)).to.be.equal(
       ethers.parseEther("10900")
     );
-    expect(await token.balanceOf(arbiterObject)).to.be.equal(
+    expect(await token.balanceOf(arbiterObject.userContract)).to.be.equal(
       ethers.parseEther("50")
     );
     expect(await token.balanceOf(betAddress)).to.be.equal(0);
@@ -275,8 +274,8 @@ describe("Bet", function () {
     // assert
     expect(await bet.getStatus()).to.be.equal(5);
     expect(await token.balanceOf(betAddress)).to.be.equal(0);
-    expect(await token.balanceOf(creatorObject)).to.be.equal(
-      ethers.parseEther("1000")
+    expect(await token.balanceOf(creatorObject.userContract)).to.be.equal(
+      ethers.parseEther("10000")
     );
   });
 
@@ -288,9 +287,9 @@ describe("Bet", function () {
 
     it("Should return the correct bet participants", async function () {
       // assert
-      expect(await bet.getCreator()).to.be.equal(creatorObject.storageAddress);
+      expect(await bet.getCreator()).to.be.equal(creatorObject.userContract);
       expect(await bet.getChallenger()).to.be.equal(ethers.ZeroAddress);
-      expect(await bet.getArbiter()).to.be.equal(arbiterObject.storageAddress);
+      expect(await bet.getArbiter()).to.be.equal(arbiterObject.userContract);
     });
 
     it("should return a bets array of length 1 for all participants", async function () {
@@ -352,11 +351,18 @@ describe("Bet", function () {
       );
     });
 
+    it("Should revert if the creator tries to accept the bet", async function () {
+      // accept the bet
+      await expect(
+        bet.connect(creator).acceptBet(creatorObject)
+      ).to.be.revertedWith("Invalid challenger");
+    });
+
     it("Should revert if the arbiter tries to accept the bet", async function () {
       // accept the bet
       await expect(
         bet.connect(arbiter).acceptBet(arbiterObject)
-      ).to.be.revertedWith("Arbiter cannot accept the bet");
+      ).to.be.revertedWith("Invalid challenger");
     });
 
     it("Should revert if the challenger tries to accept the bet again", async function () {

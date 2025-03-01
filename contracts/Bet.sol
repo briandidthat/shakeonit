@@ -80,39 +80,36 @@ contract Bet is IShakeOnIt {
     /**
      * @notice Accepts the bet and funds the escrow.
      */
-    function acceptBet(User memory _acceptor) external {
+    function acceptBet(User calldata _challenger) external {
+        // validate the status of the bet
+        require(
+            status == BetStatus.INITIATED,
+            "Bet must be in initiated status"
+        );
+        // validate the challenger
+        require(
+            msg.sender != creator.signer && msg.sender != arbiter.signer,
+            "Invalid challenger"
+        );
+        // if the bet is private, only the challenger can accept the bet
         if (betType == BetType.PRIVATE_BET) {
             require(
                 msg.sender == challenger.signer,
                 "Only the challenger can accept the bet"
             );
         }
-        // validate the challenger is not the creator or arbiter
+
         require(
-            msg.sender == _acceptor.signer,
-            "Mismatch in challenger address"
-        );
-        require(
-            msg.sender != creator.signer,
-            "Initiator cannot accept the bet"
-        );
-        require(msg.sender != arbiter.signer, "Arbiter cannot accept the bet");
-        // validate the status of the bet
-        require(
-            status == BetStatus.INITIATED,
-            "Bet must be in initiated status"
-        );
-        require(
-            balances[_acceptor.userContract] == 0,
+            balances[_challenger.userContract] == 0,
             "Participant has already funded the escrow"
         );
 
         // update the challenger
-        challenger = _acceptor;
+        challenger = _challenger;
         // update the status of the bet
         status = BetStatus.FUNDED;
         // update the balance of the challenger
-        balances[_acceptor.userContract] = stake;
+        balances[_challenger.userContract] = stake;
         balances[arbiter.userContract] = arbiterFee;
         // recieve the stake from the challenger
         betManagement.acceptBet(_buildBetDetails());

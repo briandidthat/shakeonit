@@ -51,11 +51,11 @@ describe("BetManagement", function () {
 
     // get user storage addresses
     const creatorObject = await userManagement.getUser(creator.address);
-    const creatorDetails = creatorObject.toObject();
+    creatorDetails = creatorObject.toObject();
     const arbiterObject = await userManagement.getUser(arbiter.address);
-    const arbiterDetails = arbiterObject.toObject();
+    arbiterDetails = arbiterObject.toObject();
     const challengerObject = await userManagement.getUser(challenger.address);
-    const challengerDetails = challengerObject.toObject();
+    challengerDetails = challengerObject.toObject();
 
     // create pointer for user storage contract
     creatorContract = new ethers.Contract(
@@ -134,7 +134,7 @@ describe("BetManagement", function () {
       const event = getEventObject("BetCreated", receipt.logs);
       expect(event.args.betAddress).to.be.a.properAddress;
       expect(event.args.creator).to.equal(creatorDetails.userContract);
-      expect(event.args.arbiter).to.equal(arbiterDetails.storageAddress);
+      expect(event.args.arbiter).to.equal(arbiterDetails.userContract);
       expect(event.args.token).to.equal(tokenAddress);
       expect(event.args.stake).to.equal(ethers.parseEther("1000"));
       expect(event.args.payout).to.equal(ethers.parseEther("1900"));

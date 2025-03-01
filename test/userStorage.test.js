@@ -32,7 +32,7 @@ describe("UserStorage", function () {
     // get user strorage address
     const userDetailsResponse = await userManagement.getUser(initiator.address);
     userDetails = userDetailsResponse.toObject();
-    userStorage = await ethers.getContractAt(abi, userDetails.storageAddress);
+    userStorage = await ethers.getContractAt(abi, userDetails.userContract);
 
     // deploy TestToken
     token = await getTokenFixture(multiSig);
@@ -40,11 +40,11 @@ describe("UserStorage", function () {
     // send 10000 tokens to initiator
     await token.connect(multiSig).transfer(initiator.address, 10000);
     // approve user storage to spend 1000 tokens
-    await token.connect(initiator).approve(userDetails.storageAddress, 1000);
+    await token.connect(initiator).approve(userDetails.userContract, 1000);
   });
 
   it("Should have deployed UserStorage", async function () {
-    expect(userDetails.storageAddress).to.be.a.properAddress;
+    expect(userDetails.userContract).to.be.a.properAddress;
   });
 
   it("Should have correct owner", async function () {
@@ -73,7 +73,7 @@ describe("UserStorage", function () {
       await userStorage.connect(initiator).deposit(tokenAddress, 1000);
       // check approval
       expect(
-        await token.allowance(userDetails.storageAddress, betManagementAddress)
+        await token.allowance(userDetails.userContract, betManagementAddress)
       ).to.equal(ethers.MaxUint256);
     });
 
@@ -84,7 +84,7 @@ describe("UserStorage", function () {
       await userStorage.connect(initiator).grantApproval(tokenAddress, 1000);
       // check approval
       expect(
-        await token.allowance(userDetails.storageAddress, betManagementAddress)
+        await token.allowance(userDetails.userContract, betManagementAddress)
       ).to.equal(1000);
     });
 
@@ -93,7 +93,7 @@ describe("UserStorage", function () {
       await userStorage.connect(initiator).revokeApproval(tokenAddress);
       // check approval
       expect(
-        await token.allowance(userDetails.storageAddress, betManagementAddress)
+        await token.allowance(userDetails.userContract, betManagementAddress)
       ).to.equal(0);
     });
   });
