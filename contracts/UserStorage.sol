@@ -7,7 +7,7 @@ import "./Bet.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract UserStorage is IShakeOnIt {
-    string private username;
+    bytes32 private username;
     uint256 private wins;
     uint256 private losses;
     address private owner;
@@ -31,11 +31,7 @@ contract UserStorage is IShakeOnIt {
         _;
     }
 
-    constructor(
-        string memory _username,
-        address _owner,
-        address _betManagement
-    ) {
+    constructor(bytes32 _username, address _owner, address _betManagement) {
         username = _username;
         owner = _owner;
         betManagement = _betManagement;
@@ -115,7 +111,7 @@ contract UserStorage is IShakeOnIt {
         if (!isBet[betContract]) {
             isBet[betContract] = true;
             deployedBets.push(betContract);
-            if (_betDetails.arbiter.storageAddress != storageAddr) {
+            if (_betDetails.arbiter != storageAddr) {
                 balances[token] = tokenBalance - _betDetails.stake;
             }
         }
@@ -127,12 +123,12 @@ contract UserStorage is IShakeOnIt {
             } else if (_betDetails.loser == storageAddr) {
                 // we've already updated balance upon creating/accepting bet
                 losses++;
-            } else if (_betDetails.arbiter.storageAddress == storageAddr) {
+            } else if (_betDetails.arbiter == storageAddr) {
                 // update with arbiter fee
                 balances[token] = tokenBalance + _betDetails.arbiterFee;
             }
         } else if (_betDetails.status == BetStatus.CANCELLED) {
-            if (_betDetails.initiator.storageAddress == storageAddr) {
+            if (_betDetails.creator == storageAddr) {
                 balances[token] += _betDetails.stake;
             }
         }
@@ -150,7 +146,7 @@ contract UserStorage is IShakeOnIt {
         return owner;
     }
 
-    function getUsername() external view returns (string memory) {
+    function getUsername() external view returns (bytes32) {
         return username;
     }
 

@@ -10,12 +10,14 @@ const {
 } = require("../artifacts/contracts/UserStorage.sol/UserStorage.json");
 
 describe("UserStorage", function () {
+  let creatorHash = ethers.encodeBytes32String("tester");
+
   let userManagement, userStorage, token, betManagement;
   let multiSig,
     initiator,
     addr2,
     tokenAddress,
-    userStorageAddress,
+    userDetails,
     betManagementAddress;
 
   beforeEach(async function () {
@@ -26,10 +28,11 @@ describe("UserStorage", function () {
     // Register initiator
     await userManagement
       .connect(initiator)
-      .register("tester", betManagementAddress);
+      .register(creatorHash, betManagementAddress);
     // get user strorage address
-    userStorageAddress = await userManagement.getUserStorage(initiator.address);
-    userStorage = await ethers.getContractAt(abi, userStorageAddress);
+    const userDetailsResponse = await userManagement.getUser(initiator.address);
+    userDetails = userDetailsResponse.toObject();
+    userStorage = await ethers.getContractAt(abi, userDetails.userContract);
 
     // deploy TestToken
     token = await getTokenFixture(multiSig);
@@ -37,11 +40,11 @@ describe("UserStorage", function () {
     // send 10000 tokens to initiator
     await token.connect(multiSig).transfer(initiator.address, 10000);
     // approve user storage to spend 1000 tokens
-    await token.connect(initiator).approve(userStorage, 1000);
+    await token.connect(initiator).approve(userDetails.userContract, 1000);
   });
 
   it("Should have deployed UserStorage", async function () {
-    expect(userStorageAddress).to.be.a.properAddress;
+    expect(userDetails.userContract).to.be.a.properAddress;
   });
 
   it("Should have correct owner", async function () {
@@ -70,7 +73,7 @@ describe("UserStorage", function () {
       await userStorage.connect(initiator).deposit(tokenAddress, 1000);
       // check approval
       expect(
-        await token.allowance(userStorageAddress, betManagementAddress)
+        await token.allowance(userDetails.userContract, betManagementAddress)
       ).to.equal(ethers.MaxUint256);
     });
 
@@ -81,7 +84,7 @@ describe("UserStorage", function () {
       await userStorage.connect(initiator).grantApproval(tokenAddress, 1000);
       // check approval
       expect(
-        await token.allowance(userStorageAddress, betManagementAddress)
+        await token.allowance(userDetails.userContract, betManagementAddress)
       ).to.equal(1000);
     });
 
@@ -90,7 +93,7 @@ describe("UserStorage", function () {
       await userStorage.connect(initiator).revokeApproval(tokenAddress);
       // check approval
       expect(
-        await token.allowance(userStorageAddress, betManagementAddress)
+        await token.allowance(userDetails.userContract, betManagementAddress)
       ).to.equal(0);
     });
   });
