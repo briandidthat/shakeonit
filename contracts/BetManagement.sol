@@ -4,28 +4,26 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./UserStorage.sol";
 import "./UserManagement.sol";
-import "./Restricted.sol";
 
-contract BetManagement is IShakeOnIt, Restricted {
-    address private multiSig;
+contract BetManagement is IShakeOnIt, Ownable {
     address[] public deployedBets;
     mapping(address => bool) public isBet;
 
     event BetCreated(
         address indexed betAddress,
-        address indexed initiator,
+        address indexed creator,
         address indexed arbiter,
         address token,
-        uint256 stake
+        uint256 stake,
+        uint256 payout
     );
 
-    event BetCancelled(address indexed betAddress, address indexed initiator);
-    event BetAccepted(address indexed betAddress, address indexed acceptor);
+    event BetCancelled(address indexed betAddress, address indexed creator);
+    event BetAccepted(address indexed betAddress, address indexed challenger);
     event BetWon(
         address indexed betAddress,
         address indexed winner,
-        address indexed arbiter,
-        uint256 payout,
+        address indexed loser,
         uint256 arbiterFee,
         uint256 platformFee
     );
@@ -35,14 +33,12 @@ contract BetManagement is IShakeOnIt, Restricted {
         uint256 payout
     );
 
-    constructor(address _multiSig) {
-        // grant the default admin role to the multiSig address
-        _grantRole(DEFAULT_ADMIN_ROLE, _multiSig);
-        // set the owner role to the multiSig address
-        _grantRole(MULTISIG_ROLE, _multiSig);
-        // set the multiSig address
-        multiSig = _multiSig;
+    modifier isBetContract(address _betAddress) {
+        require(isBet[_betAddress], "Not a valid bet contract");
+        _;
     }
+
+    constructor(address _multiSig) Ownable(_multiSig) {}
 
     /**
      * @notice Deploys a new bet contract and initializes it with the given parameters
@@ -58,47 +54,37 @@ contract BetManagement is IShakeOnIt, Restricted {
     function deployBet(
         BetRequest memory _betRequest
     ) external returns (address) {
-        UserDetails memory initiator = _betRequest.initiator;
-        UserDetails memory arbiter = _betRequest.arbiter;
+        address creator = _betRequest.creator.userContract;
+        address arbiter = _betRequest.arbiter.userContract;
         address token = _betRequest.token;
         uint256 stake = _betRequest.stake;
+        uint256 payout = _betRequest.payout;
 
         require(stake > 0, "Amount should be greater than 0");
         require(
-            initiator.storageAddress != address(0) &&
-                arbiter.storageAddress != address(0),
+            _betRequest.platformFee > 0,
+            "Platform fee should be greater than 0"
+        );
+        require(
+            creator != address(0) && arbiter != address(0),
             "Zero address not allowed"
         );
         require(
-            IERC20(token).balanceOf(initiator.storageAddress) >= stake,
+            IERC20(token).balanceOf(creator) >= stake,
             "Insufficient balance"
         );
         require(
-            IERC20(token).allowance(initiator.storageAddress, address(this)) >=
-                stake,
+            IERC20(token).allowance(creator, address(this)) >= stake,
             "Insufficient allowance"
         );
 
         // Deploy a new bet contract
-        Bet bet = new Bet(
-            token,
-            initiator,
-            arbiter,
-            stake,
-            _betRequest.arbiterFee,
-            _betRequest.platformFee,
-            _betRequest.payout,
-            _betRequest.condition
-        );
+        Bet bet = new Bet(_betRequest);
         address betAddress = address(bet);
 
         // transfer the stake to the bet contract
         require(
-            IERC20(token).transferFrom(
-                initiator.storageAddress,
-                betAddress,
-                stake
-            ),
+            IERC20(token).transferFrom(creator, betAddress, stake),
             "Token transfer failed"
         );
 
@@ -108,20 +94,12 @@ contract BetManagement is IShakeOnIt, Restricted {
         // update the state
         isBet[betAddress] = true;
         deployedBets.push(betAddress);
-        // grant the bet contract the BET_CONTRACT_ROLE
-        _grantRole(BET_CONTRACT_ROLE, betAddress);
         // save the bet in the initiator's and arbiter's storage
         BetDetails memory betDetails = bet.getBetDetails();
-        UserStorage(initiator.storageAddress).saveBet(betDetails);
-        UserStorage(arbiter.storageAddress).saveBet(betDetails);
+        UserStorage(creator).saveBet(betDetails);
+        UserStorage(arbiter).saveBet(betDetails);
         // emit BetCreated event
-        emit BetCreated(
-            betAddress,
-            initiator.storageAddress,
-            arbiter.storageAddress,
-            token,
-            stake
-        );
+        emit BetCreated(betAddress, creator, arbiter, token, stake, payout);
 
         return betAddress;
     }
@@ -131,43 +109,42 @@ contract BetManagement is IShakeOnIt, Restricted {
      */
     function acceptBet(
         BetDetails memory betDetails
-    ) external hasCorrectRole(BET_CONTRACT_ROLE) {
+    ) external isBetContract(msg.sender) {
         // fund the bet contract
         require(
             IERC20(betDetails.token).transferFrom(
-                betDetails.acceptor.storageAddress,
+                betDetails.challenger,
                 betDetails.betContract,
                 betDetails.stake
             ),
             "Token transfer failed"
         );
         // update the bet for all parties
-        UserStorage(betDetails.initiator.storageAddress).saveBet(betDetails);
-        UserStorage(betDetails.acceptor.storageAddress).saveBet(betDetails);
-        UserStorage(betDetails.arbiter.storageAddress).saveBet(betDetails);
+        UserStorage(betDetails.creator).saveBet(betDetails);
+        UserStorage(betDetails.challenger).saveBet(betDetails);
+        UserStorage(betDetails.arbiter).saveBet(betDetails);
         // emit BetAccepted event
-        emit BetAccepted(msg.sender, betDetails.acceptor.storageAddress);
+        emit BetAccepted(msg.sender, betDetails.challenger);
     }
 
     /**
      * @notice Reports that a winner has been declared for a bet and updates storage
-     * @dev Can only be called by addresses with BET_CONTRACT_ROLE
+     * @dev Can only be called by bet contracts
      * @param betDetails The details of the bet including initiator, acceptor, arbiter, and payment info
      * @custom:events Emits BetWon event with payment details
      */
     function reportWinnerDeclared(
         BetDetails memory betDetails
-    ) external hasCorrectRole(BET_CONTRACT_ROLE) {
+    ) external isBetContract(msg.sender) {
         // update the bet for all parties
-        UserStorage(betDetails.initiator.storageAddress).saveBet(betDetails);
-        UserStorage(betDetails.acceptor.storageAddress).saveBet(betDetails);
-        UserStorage(betDetails.arbiter.storageAddress).saveBet(betDetails);
+        UserStorage(betDetails.creator).saveBet(betDetails);
+        UserStorage(betDetails.challenger).saveBet(betDetails);
+        UserStorage(betDetails.arbiter).saveBet(betDetails);
         // emit BetWon event
         emit BetWon(
             msg.sender,
             betDetails.winner,
-            betDetails.arbiter.storageAddress,
-            betDetails.payout,
+            betDetails.loser,
             betDetails.arbiterFee,
             betDetails.platformFee
         );
@@ -181,14 +158,13 @@ contract BetManagement is IShakeOnIt, Restricted {
      */
     function reportBetSettled(
         BetDetails memory betDetails
-    ) external hasCorrectRole(BET_CONTRACT_ROLE) {
+    ) external isBetContract(msg.sender) {
         // update the bet for all parties
-        UserStorage(betDetails.initiator.storageAddress).saveBet(betDetails);
-        UserStorage(betDetails.acceptor.storageAddress).saveBet(betDetails);
-        UserStorage(betDetails.arbiter.storageAddress).saveBet(betDetails);
-
-        // remove the BET_CONTRACT_ROLE from the bet contract
-        _revokeRole(BET_CONTRACT_ROLE, msg.sender);
+        UserStorage(betDetails.creator).saveBet(betDetails);
+        UserStorage(betDetails.challenger).saveBet(betDetails);
+        UserStorage(betDetails.arbiter).saveBet(betDetails);
+        // set the isBet flag to false
+        isBet[msg.sender] = false;
         // emit BetSettled event
         emit BetSettled(msg.sender, betDetails.token, betDetails.payout);
     }
@@ -198,28 +174,22 @@ contract BetManagement is IShakeOnIt, Restricted {
      */
     function reportCancellation(
         BetDetails memory betDetails
-    ) external hasCorrectRole(BET_CONTRACT_ROLE) {
+    ) external isBetContract(msg.sender) {
         // update the bet for initiator and arbiter (acceptor is not updated atp)
-        UserStorage(betDetails.initiator.storageAddress).saveBet(betDetails);
-        UserStorage(betDetails.arbiter.storageAddress).saveBet(betDetails);
-        // remove the BET_CONTRACT_ROLE from the bet contract
-        _revokeRole(BET_CONTRACT_ROLE, msg.sender);
+        UserStorage(betDetails.creator).saveBet(betDetails);
+        UserStorage(betDetails.arbiter).saveBet(betDetails);
+        // set the isBet flag to false
+        isBet[msg.sender] = false;
         // emit BetCancelled event
-        emit BetCancelled(msg.sender, betDetails.initiator.storageAddress);
+        emit BetCancelled(msg.sender, betDetails.creator);
     }
 
-    function setNewMultiSig(
-        address _newMultiSig
-    ) external onlyRole(MULTISIG_ROLE) {
-        _grantRole(DEFAULT_ADMIN_ROLE, _newMultiSig);
-        _grantRole(MULTISIG_ROLE, _newMultiSig);
-        _revokeRole(MULTISIG_ROLE, msg.sender);
-
-        multiSig = _newMultiSig;
+    function setNewMultiSig(address _newMultiSig) external onlyOwner {
+        _transferOwnership(_newMultiSig);
     }
 
     function getMultiSig() external view returns (address) {
-        return multiSig;
+        return owner();
     }
 
     function getBets() external view returns (address[] memory) {

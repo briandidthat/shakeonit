@@ -2,6 +2,12 @@
 pragma solidity ^0.8.0;
 
 interface IShakeOnIt {
+    struct User {
+        bytes32 username;
+        address signer;
+        address userContract;
+    }
+
     enum BetStatus {
         CREATED,
         INITIATED,
@@ -11,30 +17,33 @@ interface IShakeOnIt {
         CANCELLED
     }
 
-    struct UserDetails {
-        address owner;
-        address storageAddress;
+    enum BetType {
+        OPEN_BET,
+        PRIVATE_BET
     }
 
     struct BetDetails {
+        BetType betType;
+        BetStatus status;
         address betContract;
         address token;
-        UserDetails initiator;
-        UserDetails arbiter;
-        UserDetails acceptor;
+        address creator;
+        address arbiter;
+        address challenger;
         address winner;
         address loser;
         uint256 stake;
         uint256 arbiterFee;
         uint256 platformFee;
         uint256 payout;
-        BetStatus status;
     }
 
     struct BetRequest {
+        BetType betType;
         address token;
-        UserDetails initiator;
-        UserDetails arbiter;
+        User creator;
+        User arbiter;
+        User challenger;
         uint256 stake;
         uint256 arbiterFee;
         uint256 platformFee;
