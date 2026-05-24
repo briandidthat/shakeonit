@@ -78,22 +78,48 @@ contract BetRegistry is AccessControl {
         address indexed arbiter,
         address token,
         uint256 stake,
+        uint256 arbiterFee,
+        uint256 platformFee,
+        uint256 deadline,
         BetType betType
     );
-    event BetMatched(uint256 indexed betId, address indexed challenger);
+    event BetMatched(
+        uint256 indexed betId,
+        address indexed challenger,
+        address token,
+        uint256 stake
+    );
     event BetSettled(
         uint256 indexed betId,
         address indexed winner,
         address indexed loser,
-        uint256 payout
+        address token,
+        uint256 payout,
+        uint256 arbiterFee,
+        uint256 platformFee
     );
-    event BetCancelled(uint256 indexed betId, address indexed creator);
+    event BetCancelled(
+        uint256 indexed betId,
+        address indexed creator,
+        address token,
+        uint256 stake
+    );
     event BetForfeited(
         uint256 indexed betId,
         address indexed forfeiter,
-        address indexed winner
+        address indexed winner,
+        address token,
+        uint256 payout,
+        uint256 platformFee
     );
-    event BetRefunded(uint256 indexed betId);
+    event BetRefunded(
+        uint256 indexed betId,
+        address indexed creator,
+        address indexed challenger,
+        address token,
+        uint256 refundPerParticipant,
+        uint256 platformFee
+    );
     event PlatformAddressUpdated(address indexed oldAddress, address indexed newAddress);
 
     constructor(
@@ -166,6 +192,9 @@ contract BetRegistry is AccessControl {
             request.arbiter,
             request.token,
             request.stake,
+            request.arbiterFee,
+            request.platformFee,
+            request.deadline,
             request.betType
         );
     }
@@ -190,7 +219,7 @@ contract BetRegistry is AccessControl {
 
         vault.lock(msg.sender, bet.token, bet.stake);
 
-        emit BetMatched(betId, msg.sender);
+        emit BetMatched(betId, msg.sender, bet.token, bet.stake);
     }
 
     /**
@@ -219,7 +248,7 @@ contract BetRegistry is AccessControl {
         registry.recordWin(winner);
         registry.recordLoss(loser);
 
-        emit BetSettled(betId, winner, loser, bet.payout);
+        emit BetSettled(betId, winner, loser, bet.token, bet.payout, bet.arbiterFee, bet.platformFee);
     }
 
     /**
@@ -234,7 +263,7 @@ contract BetRegistry is AccessControl {
         --_activeBetCount;
         vault.unlock(bet.creator, bet.token, bet.stake);
 
-        emit BetCancelled(betId, msg.sender);
+        emit BetCancelled(betId, msg.sender, bet.token, bet.stake);
     }
 
     /**
@@ -265,7 +294,7 @@ contract BetRegistry is AccessControl {
         registry.recordWin(winner);
         registry.recordLoss(loser);
 
-        emit BetForfeited(betId, loser, winner);
+        emit BetForfeited(betId, loser, winner, bet.token, bet.payout, bet.platformFee);
     }
 
     /**
@@ -289,7 +318,7 @@ contract BetRegistry is AccessControl {
         vault.credit(bet.challenger, bet.token, refund);
         vault.credit(platformAddress, bet.token, fee * 2);
 
-        emit BetRefunded(betId);
+        emit BetRefunded(betId, bet.creator, bet.challenger, bet.token, refund, fee * 2);
     }
 
     /**
@@ -316,7 +345,7 @@ contract BetRegistry is AccessControl {
             vault.credit(bet.challenger, bet.token, refund);
             vault.credit(platformAddress, bet.token, fee * 2);
 
-            emit BetRefunded(betIds[i]);
+            emit BetRefunded(betIds[i], bet.creator, bet.challenger, bet.token, refund, fee * 2);
         }
     }
 

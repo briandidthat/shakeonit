@@ -148,7 +148,7 @@ describe("BetRegistry", function () {
       const request = await buildRequest();
       await expect(betRegistry.connect(creator).createBet(request))
         .to.emit(betRegistry, "BetCreated")
-        .withArgs(1n, creator.address, arbiter.address, tokenAddress, STAKE, BetType.OPEN);
+        .withArgs(1n, creator.address, arbiter.address, tokenAddress, STAKE, ARBITER_FEE, PLATFORM_FEE, request.deadline, BetType.OPEN);
     });
 
     it("increments betId sequentially", async function () {
@@ -267,7 +267,7 @@ describe("BetRegistry", function () {
       const { betId } = await createOpenBet();
       await expect(betRegistry.connect(challenger).acceptBet(betId))
         .to.emit(betRegistry, "BetMatched")
-        .withArgs(betId, challenger.address);
+        .withArgs(betId, challenger.address, tokenAddress, STAKE);
     });
 
     it("allows any registered user to accept an OPEN bet", async function () {
@@ -377,7 +377,7 @@ describe("BetRegistry", function () {
       const { betId } = await createMatchedBet();
       await expect(betRegistry.connect(arbiter).declareWinner(betId, creator.address))
         .to.emit(betRegistry, "BetSettled")
-        .withArgs(betId, creator.address, challenger.address, PAYOUT);
+        .withArgs(betId, creator.address, challenger.address, tokenAddress, PAYOUT, ARBITER_FEE, PLATFORM_FEE);
     });
 
     it("payout + arbiterFee + platformFee equals stake * 2", async function () {
@@ -434,7 +434,7 @@ describe("BetRegistry", function () {
       const { betId } = await createOpenBet();
       await expect(betRegistry.connect(creator).cancel(betId))
         .to.emit(betRegistry, "BetCancelled")
-        .withArgs(betId, creator.address);
+        .withArgs(betId, creator.address, tokenAddress, STAKE);
     });
 
     it("reverts if caller is not the creator", async function () {
@@ -499,7 +499,7 @@ describe("BetRegistry", function () {
       const { betId } = await createMatchedBet();
       await expect(betRegistry.connect(creator).forfeit(betId))
         .to.emit(betRegistry, "BetForfeited")
-        .withArgs(betId, creator.address, challenger.address);
+        .withArgs(betId, creator.address, challenger.address, tokenAddress, PAYOUT, PLATFORM_FEE);
     });
 
     it("reverts if bet is not matched", async function () {
@@ -564,9 +564,11 @@ describe("BetRegistry", function () {
     it("emits BetRefunded", async function () {
       const { betId } = await createMatchedBet();
       await time.increase(ONE_DAY + 1);
+      const fee = STAKE * 500n / 10000n; // 5%
+      const refund = STAKE - fee;
       await expect(betRegistry.connect(creator).claimTimeout(betId))
         .to.emit(betRegistry, "BetRefunded")
-        .withArgs(betId);
+        .withArgs(betId, creator.address, challenger.address, tokenAddress, refund, fee * 2n);
     });
 
     it("reverts before the deadline", async function () {
@@ -648,9 +650,11 @@ describe("BetRegistry", function () {
       const { betId: id2 } = await createMatchedBet();
       await time.increase(ONE_DAY + 1);
 
+      const fee = STAKE * 500n / 10000n;
+      const refund = STAKE - fee;
       await expect(betRegistry.connect(stranger).batchClaimTimeout([id1, id2]))
-        .to.emit(betRegistry, "BetRefunded").withArgs(id1)
-        .and.to.emit(betRegistry, "BetRefunded").withArgs(id2);
+        .to.emit(betRegistry, "BetRefunded").withArgs(id1, creator.address, challenger.address, tokenAddress, refund, fee * 2n)
+        .and.to.emit(betRegistry, "BetRefunded").withArgs(id2, creator.address, challenger.address, tokenAddress, refund, fee * 2n);
     });
 
     it("reverts if batch size exceeds the limit of 50", async function () {
