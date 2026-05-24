@@ -1,0 +1,93 @@
+specVersion: 0.0.5
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: BetRegistry
+    network: base
+    source:
+      address: "0x0000000000000000000000000000000000000000" # replace after deploy
+      abi: BetRegistry
+      startBlock: 0 # replace after deploy
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Bet
+        - User
+        - Platform
+        - DailyStats
+      abis:
+        - name: BetRegistry
+          file: ./abis/BetRegistry.json
+      eventHandlers:
+        - event: BetCreated(indexed uint256,indexed address,indexed address,address,uint256,uint256,uint256,uint256,uint8)
+          handler: handleBetCreated
+        - event: BetMatched(indexed uint256,indexed address,address,uint256)
+          handler: handleBetMatched
+        - event: BetSettled(indexed uint256,indexed address,indexed address,address,uint256,uint256,uint256)
+          handler: handleBetSettled
+        - event: BetCancelled(indexed uint256,indexed address,address,uint256)
+          handler: handleBetCancelled
+        - event: BetForfeited(indexed uint256,indexed address,indexed address,address,uint256,uint256)
+          handler: handleBetForfeited
+        - event: BetRefunded(indexed uint256,indexed address,indexed address,address,uint256,uint256)
+          handler: handleBetRefunded
+      file: ./src/bet-registry.ts
+
+  - kind: ethereum
+    name: UserRegistry
+    network: base
+    source:
+      address: "0x0000000000000000000000000000000000000000" # replace after deploy
+      abi: UserRegistry
+      startBlock: 0 # replace after deploy
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - User
+      abis:
+        - name: UserRegistry
+          file: ./abis/UserRegistry.json
+      eventHandlers:
+        - event: UserRegistered(indexed address,indexed bytes32)
+          handler: handleUserRegistered
+        - event: WinRecorded(indexed address,uint256)
+          handler: handleWinRecorded
+        - event: LossRecorded(indexed address,uint256)
+          handler: handleLossRecorded
+      file: ./src/user-registry.ts
+
+  - kind: ethereum
+    name: UserVault
+    network: base
+    source:
+      address: "0x0000000000000000000000000000000000000000" # replace after deploy
+      abi: UserVault
+      startBlock: 0 # replace after deploy
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - UserTokenBalance
+      abis:
+        - name: UserVault
+          file: ./abis/UserVault.json
+      eventHandlers:
+        - event: Deposited(indexed address,indexed address,uint256)
+          handler: handleDeposited
+        - event: Withdrawn(indexed address,indexed address,uint256)
+          handler: handleWithdrawn
+        - event: Locked(indexed address,indexed address,uint256)
+          handler: handleLocked
+        - event: Unlocked(indexed address,indexed address,uint256)
+          handler: handleUnlocked
+        - event: Credited(indexed address,indexed address,uint256)
+          handler: handleCredited
+        - event: Debited(indexed address,indexed address,uint256)
+          handler: handleDebited
+      file: ./src/user-vault.ts
