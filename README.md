@@ -6,6 +6,7 @@ ShakeOnIt is a decentralized peer-to-peer betting protocol built on Base. Two pa
 
 ## Table of Contents
 
+- [How a Bet Works](#how-a-bet-works)
 - [Architecture Overview](#architecture-overview)
 - [Contract Reference](#contract-reference)
   - [ShakeOnIt.sol](#shakeonitsol)
@@ -19,9 +20,101 @@ ShakeOnIt is a decentralized peer-to-peer betting protocol built on Base. Two pa
 - [Upgrade Model](#upgrade-model)
 - [Security Properties](#security-properties)
 - [Events & Off-Chain Indexing](#events--off-chain-indexing)
+- [Subgraph](#subgraph)
 - [Local Development](#local-development)
 - [Deployment](#deployment)
 - [Testnet Contracts](#testnet-contracts)
+
+---
+
+## How a Bet Works
+
+This section explains the full lifecycle of a bet in plain terms — no blockchain knowledge required.
+
+### The three roles
+
+| Role | Who they are | What they do |
+|---|---|---|
+| **Creator** | The person who proposes the bet | Sets the terms, stakes, and picks the arbiter |
+| **Challenger** | The person who accepts the bet | Agrees to the terms and matches the stake |
+| **Arbiter** | A trusted third party agreed upon by both sides | Watches the outcome and declares the winner |
+
+---
+
+### Step-by-step walkthrough
+
+**1. Register**
+
+Before doing anything, both the creator and challenger must register a username. This is a one-time step that creates your on-chain identity.
+
+**2. Deposit funds**
+
+Both parties deposit tokens (e.g. USDC) into their vault balance. Think of this like depositing chips at a casino cage — your tokens are held safely in the vault, and your balance is what you use to bet. You only need to deposit once and can use that balance across many bets.
+
+**3. Create the bet**
+
+The creator proposes a bet by specifying:
+- What the bet is about (e.g. *"Team A wins the championship"*)
+- How much each side must stake (e.g. 500 USDC each)
+- Who the arbiter is and how much they earn for judging (e.g. 25 USDC)
+- A platform fee (e.g. 25 USDC)
+- A deadline — the date by which the arbiter must declare a winner
+
+The creator's stake is immediately locked in the vault. It cannot be withdrawn until the bet resolves.
+
+**4. Accept the bet**
+
+The challenger sees the bet and accepts it. Their stake is locked too. Both sides are now committed — the bet is live.
+
+> For **private bets**, only a specific designated challenger can accept. For **open bets**, anyone can accept first.
+
+**5. Arbiter declares the winner**
+
+Once the real-world outcome is known, the arbiter calls `declareWinner`. The protocol automatically:
+- Credits the winner with their payout (both stakes minus fees)
+- Credits the arbiter their fee
+- Credits the platform its fee
+
+No manual token transfers happen — all balances update instantly inside the vault.
+
+**6. Withdraw**
+
+The winner's available balance increases. They can withdraw to their wallet at any time.
+
+---
+
+### What if things go wrong?
+
+| Situation | What happens |
+|---|---|
+| No one accepts the bet | The creator can **cancel** anytime and get their full stake back |
+| One party wants to give up | Either side can **forfeit** — the other party wins automatically and receives the payout plus the arbiter fee (no arbitration was needed) |
+| Arbiter never declares before the deadline | Anyone (either participant, a keeper bot, or a third party) can trigger `claimTimeout`. Both parties recover **95% of their stake**. The platform collects a 5% no-show fee from each side (10% total) to cover the inconvenience |
+
+---
+
+### Visual summary
+
+```
+  Creator                   Challenger                  Arbiter
+     │                           │                          │
+     │── register() ─────────────│── register() ────────────│── register()
+     │                           │                          │
+     │── deposit(500 USDC) ──────│── deposit(500 USDC)      │
+     │                           │                          │
+     │── createBet() ────────────────────────────────────────────────►
+     │   stake=500, fees=50      │                          │
+     │   [500 USDC locked]       │                          │
+     ��                           │                          │
+     │                           │── acceptBet() ──────────────────────►
+     │                           │   [500 USDC locked]      │
+     │                           │                          │
+     │                           │               declareWinner(creator) ──►
+     │                           │                          │
+     │◄── credit 950 USDC ───────│◄─── (loser, nothing)    │◄─── credit 25 USDC
+     │                           │                          │
+     │── withdraw(950 USDC) ─────────────────────��───────────────────────►
+```
 
 ---
 
@@ -30,11 +123,11 @@ ShakeOnIt is a decentralized peer-to-peer betting protocol built on Base. Two pa
 The protocol is built around four long-lived contracts. No new contract is deployed per user or per bet — all state lives in mappings, keeping gas costs flat regardless of how many users or bets exist.
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────���──┐
 │                      ShakeOnIt                          │
 │          (coordinator · multisig-owned · Ownable)       │
 │                                                         │
-│  deploys & wires ──────────────────────────────────┐    │
+│  deploys & wires ───────────────────────────────���──┐    │
 └─────────────────────────────────────────────────────┼───┘
                                                       │
           ┌───────────────────────────────────────────┼──────────────────────┐
@@ -115,7 +208,7 @@ Only addresses holding `BET_MANAGER_ROLE` (i.e. the active `BetRegistry`) may mo
 | Function | Description |
 |---|---|
 | `lock(user, token, amount)` | Moves `amount` from available → locked when a bet is created or accepted. |
-| `unlock(user, token, amount)` | Moves `amount` from locked → available when a bet is cancelled or refunded. |
+| `unlock(user, token, amount)` | Moves `amount` from locked → available when a bet is cancelled. |
 | `debit(user, token, amount)` | Removes `amount` from locked without returning it (funds are redistributed to other parties via `credit`). |
 | `credit(user, token, amount)` | Adds `amount` to available balance (winnings, arbiter fees, refunds). |
 
@@ -218,7 +311,8 @@ struct BetRequest {
 | `declareWinner(uint256 betId, address winner)` | Arbiter only, before deadline | `MATCHED` | `SETTLED` | Distributes payout, arbiter fee, and platform fee |
 | `cancel(uint256 betId)` | Creator only | `OPEN` | `CANCELLED` | Unlocks creator's stake |
 | `forfeit(uint256 betId)` | Creator or challenger | `MATCHED` | `FORFEITED` | Forfeiting party loses their stake; winner receives `payout + arbiterFee` |
-| `claimTimeout(uint256 betId)` | Creator or challenger, after deadline | `MATCHED` | `CANCELLED` | Both stakes are fully refunded — no fees taken |
+| `claimTimeout(uint256 betId)` | **Anyone**, after deadline | `MATCHED` | `CANCELLED` | Each participant receives 95% of their stake back; platform collects 5% from each side (10% total) as a no-show fee |
+| `batchClaimTimeout(uint256[] betIds)` | **Anyone**, after deadline | `MATCHED` | `CANCELLED` | Processes up to 50 expired bets in one transaction. Invalid or already-settled IDs are silently skipped — designed for keeper automation |
 
 **Validation rules for `createBet`**
 
@@ -284,7 +378,7 @@ Everything in between is integer arithmetic on mappings.
                     createBet()
                         │
                         ▼
-                      OPEN ──────────────────────────► CANCELLED
+                      OPEN ────────────────���─────────► CANCELLED
                         │          cancel()           (creator unlocked)
                         │          (creator only,
                         │          any time while OPEN)
@@ -296,8 +390,9 @@ Everything in between is integer arithmetic on mappings.
                      │    │    (creator or challenger) payout + arbiterFee)
                      │    │
                      │    └──── claimTimeout() ──────► CANCELLED
-                     │          (after deadline,      (both refunded in full,
-                     │          creator or challenger) no fees taken)
+                     │          (anyone, after         (each party gets 95%
+                     │          deadline)              of stake back; platform
+                     │                                 takes 5% per side)
                      │
                  declareWinner()
                 (arbiter only,
@@ -315,17 +410,17 @@ Every bet has a `deadline` timestamp set at creation time. Its meaning differs b
 
 | Status | Deadline effect |
 |---|---|
-| `OPEN` | `acceptBet` reverts after the deadline (bet can no longer be accepted). Creator can still `cancel` freely. |
-| `MATCHED` | `declareWinner` reverts after the deadline — the arbiter's window is permanently closed. Either participant can then call `claimTimeout` to recover their full stake with zero fees. |
+| `OPEN` | `acceptBet` reverts after the deadline — the bet can no longer be accepted. Creator can still `cancel` freely. |
+| `MATCHED` | `declareWinner` reverts after the deadline — the arbiter's window is permanently closed. Anyone can then call `claimTimeout` to trigger a partial refund (95% per participant). |
 
-The deadline does not automatically trigger anything — a participant must explicitly call `claimTimeout`. Until they do, the bet remains in `MATCHED` state.
+The deadline does not automatically trigger anything on-chain. A person or keeper bot must explicitly call `claimTimeout`. Until they do, the bet remains in `MATCHED` state.
 
 ### Forfeit vs timeout
 
 | Situation | Mechanism | Fee impact |
 |---|---|---|
 | One party admits defeat | `forfeit()` | Platform fee still taken; arbiter fee goes to winner (no arbitration needed) |
-| Arbiter fails to declare before deadline | `claimTimeout()` | **No fees taken** — both stakes refunded in full |
+| Arbiter fails to declare before deadline | `claimTimeout()` | Platform takes 5% from each side (10% total); each party receives 95% of their stake |
 
 ---
 
@@ -333,11 +428,13 @@ The deadline does not automatically trigger anything — a participant must expl
 
 | Recipient | Source | Notes |
 |---|---|---|
-| Winner | `payout = stake * 2 - arbiterFee - platformFee` | Credited to `_available` balance in `UserVault` |
-| Arbiter | `arbiterFee` | Credited on `declareWinner`; zero on `claimTimeout`; goes to winner on `forfeit` |
-| Platform | `platformFee` | Credited to `platformAddress` on `declareWinner` and `forfeit`; zero on `claimTimeout` |
+| Winner | `payout = stake * 2 - arbiterFee - platformFee` | Credited to `_available` in `UserVault` on `declareWinner` |
+| Arbiter | `arbiterFee` | Credited on `declareWinner`; goes to winner on `forfeit` (no arbitration needed); not paid on `claimTimeout` |
+| Platform | `platformFee` | Credited on `declareWinner` and `forfeit`; on `claimTimeout`, collects 5% of each participant's stake (10% total) as a no-show fee |
 
-**Invariant:** `payout + arbiterFee + platformFee = stake * 2` — always holds for both `declareWinner` and `forfeit`. `claimTimeout` is the only path where no fees apply.
+**Settlement invariant:** `payout + arbiterFee + platformFee = stake * 2` — holds for both `declareWinner` and `forfeit`.
+
+**Timeout invariant:** `(refund × 2) + timeoutFee = stake * 2` where `refund = stake × 0.95` and `timeoutFee = stake × 0.10`.
 
 ---
 
@@ -381,7 +478,7 @@ BetRegistry newRegistry = new BetRegistry(
 
 **2. Ensure the current registry has no active bets**
 
-`upgradeBetRegistry` will revert if `betRegistry.getActiveBetCount() > 0`. Wait for all open and matched bets to reach a terminal state (settled, cancelled, or forfeited), or use `claimTimeout` to close matched bets past their deadline.
+`upgradeBetRegistry` will revert if `betRegistry.getActiveBetCount() > 0`. Wait for all open and matched bets to reach a terminal state (settled, cancelled, or forfeited), or use `batchClaimTimeout` to close matched bets past their deadline.
 
 **3. Call the upgrade**
 ```solidity
@@ -408,6 +505,7 @@ All user balances and profiles remain untouched in `UserVault` and `UserRegistry
 - **Arbiter cannot act after the deadline** — `declareWinner` reverts if `block.timestamp >= bet.deadline`
 - **Upgrade cannot strand in-flight funds** — `upgradeBetRegistry` reverts if `getActiveBetCount() > 0`
 - **No user can double-spend locked funds** — `lock` checks available balance; `withdraw` checks available balance; locked funds are only accessible via the bet they are committed to
+- **Expired bets are always recoverable** — `claimTimeout` is permissionless; anyone (including keeper bots) can trigger it once the deadline passes
 
 ### Trust assumptions
 
@@ -419,24 +517,103 @@ All user balances and profiles remain untouched in `UserVault` and `UserRegistry
 
 ## Events & Off-Chain Indexing
 
-The protocol emits events on every state change. No arrays of bets or users are stored on-chain — all historical data is reconstructed from events using an indexer such as The Graph.
+Every event is self-contained — no additional contract call is needed to reconstruct what happened from the log alone. No arrays of bets or users are stored on-chain; all historical data is reconstructed from events using an indexer such as The Graph.
 
-| Contract | Event | Indexed fields |
+| Contract | Event | Parameters |
 |---|---|---|
-| `UserVault` | `Deposited(user, token, amount)` | user, token |
-| `UserVault` | `Withdrawn(user, token, amount)` | user, token |
-| `UserVault` | `Locked / Unlocked / Debited / Credited` | user, token |
-| `UserVault` | `TokenAllowlistUpdated(token, allowed)` | token |
-| `UserRegistry` | `UserRegistered(user, username)` | user, username |
-| `UserRegistry` | `WinRecorded / LossRecorded(user, total)` | user |
-| `BetRegistry` | `BetCreated(betId, creator, arbiter, token, stake, betType)` | betId, creator, arbiter |
-| `BetRegistry` | `BetMatched(betId, challenger)` | betId, challenger |
-| `BetRegistry` | `BetSettled(betId, winner, loser, payout)` | betId, winner, loser |
-| `BetRegistry` | `BetCancelled(betId, creator)` | betId, creator |
-| `BetRegistry` | `BetForfeited(betId, forfeiter, winner)` | betId, forfeiter, winner |
-| `BetRegistry` | `BetRefunded(betId)` | betId |
-| `ShakeOnIt` | `SystemDeployed(vault, registry, betRegistry, platform)` | vault, registry, betRegistry |
-| `ShakeOnIt` | `BetRegistryUpgraded(oldRegistry, newRegistry)` | oldRegistry, newRegistry |
+| `UserVault` | `Deposited` | `indexed user, indexed token, amount` |
+| `UserVault` | `Withdrawn` | `indexed user, indexed token, amount` |
+| `UserVault` | `Locked / Unlocked / Debited / Credited` | `indexed user, indexed token, amount` |
+| `UserVault` | `TokenAllowlistUpdated` | `indexed token, allowed` |
+| `UserRegistry` | `UserRegistered` | `indexed user, indexed username` |
+| `UserRegistry` | `WinRecorded / LossRecorded` | `indexed user, totalWins/totalLosses` |
+| `BetRegistry` | `BetCreated` | `indexed betId, indexed creator, indexed arbiter, token, stake, arbiterFee, platformFee, deadline, betType` |
+| `BetRegistry` | `BetMatched` | `indexed betId, indexed challenger, token, stake` |
+| `BetRegistry` | `BetSettled` | `indexed betId, indexed winner, indexed loser, token, payout, arbiterFee, platformFee` |
+| `BetRegistry` | `BetCancelled` | `indexed betId, indexed creator, token, stake` |
+| `BetRegistry` | `BetForfeited` | `indexed betId, indexed forfeiter, indexed winner, token, payout, platformFee` |
+| `BetRegistry` | `BetRefunded` | `indexed betId, indexed creator, indexed challenger, token, refundPerParticipant, platformFee` |
+| `ShakeOnIt` | `SystemDeployed` | `indexed vault, indexed registry, indexed betRegistry, platformAddress` |
+| `ShakeOnIt` | `BetRegistryUpgraded` | `indexed oldRegistry, indexed newRegistry` |
+
+---
+
+## Subgraph
+
+A Graph Protocol subgraph is included at `subgraph/` for indexing all contract events into a queryable GraphQL API.
+
+### Entities
+
+| Entity | Description |
+|---|---|
+| `Bet` | Full bet state — status, participants, fees, timestamps |
+| `User` | Per-address profile — wins, losses, total wagered, total earned |
+| `UserTokenBalance` | Available and locked balance per (user, token) pair |
+| `Platform` | Singleton — total bets, active bets, lifetime fees, outcome breakdown |
+| `DailyStats` | Daily aggregates for charts — volume, fees, bet outcomes |
+
+### Example queries
+
+```graphql
+# Platform overview
+{
+  platform(id: "platform") {
+    totalBets
+    activeBets
+    totalFeesCollected
+    totalSettled
+    totalTimedOut
+  }
+}
+
+# User profile and bet history
+{
+  user(id: "0xabc...") {
+    wins
+    losses
+    totalWagered
+    totalEarned
+    betsCreated { id status deadline }
+    balances { token available locked }
+  }
+}
+
+# Daily fee revenue for the last 30 days
+{
+  dailyStats(orderBy: date, orderDirection: desc, first: 30) {
+    date
+    feesCollected
+    betsSettled
+    betsTimedOut
+  }
+}
+
+# All currently active bets
+{
+  bets(where: { status: "MATCHED" }, orderBy: deadline, orderDirection: asc) {
+    id
+    creator { id }
+    challenger { id }
+    arbiter
+    stake
+    deadline
+  }
+}
+```
+
+### Deploying the subgraph
+
+1. Deploy contracts and note the block number
+2. Update the three `address` fields and `startBlock` values in `subgraph/subgraph.yaml`
+3. Create a subgraph on [thegraph.com/studio](https://thegraph.com/studio)
+4. Run:
+
+```bash
+cd subgraph
+npx graph codegen
+npx graph build
+npx graph deploy <your-subgraph-slug>
+```
 
 ---
 
@@ -454,14 +631,11 @@ npx hardhat compile
 # Run all tests
 npx hardhat test
 
-# Run tests with gas report
-npx hardhat test
-
-# Run coverage (new contracts only)
+# Run coverage
 npx hardhat coverage --testfiles "test/userVault.test.js,test/userRegistry.test.js,test/betRegistry.test.js,test/shakeOnIt.test.js"
 ```
 
-### Test coverage (new contracts)
+### Test coverage
 
 | Contract | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|
@@ -497,9 +671,10 @@ MULTISIG_ADDRESS=0x... PLATFORM_ADDRESS=0x... npx hardhat run scripts/deploy.js 
 
 1. Confirm `ShakeOnIt.owner()` is the intended multisig
 2. Add tokens via `shakeOnIt.setTokenAllowed(tokenAddress, true)` from the multisig
-3. Share `UserRegistry` address so users can call `register(username)`
-4. Share `UserVault` address so users can `deposit` and `withdraw`
-5. Share `BetRegistry` address so users can `createBet` and `acceptBet`
+3. Update `subgraph/subgraph.yaml` with deployed addresses and start block, then deploy the subgraph
+4. Share `UserRegistry` address so users can call `register(username)`
+5. Share `UserVault` address so users can `deposit` and `withdraw`
+6. Share `BetRegistry` address so users can `createBet` and `acceptBet`
 
 ---
 
