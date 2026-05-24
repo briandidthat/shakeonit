@@ -60,6 +60,9 @@ contract BetRegistry is AccessControl {
         string condition;
     }
 
+    uint256 private constant TIMEOUT_FEE_BPS = 500; // 5% per participant on arbiter no-show
+    uint256 private constant BPS_DENOMINATOR = 10_000;
+
     uint256 private _betCount;
     uint256 private _activeBetCount;
     address public platformAddress;
@@ -272,15 +275,18 @@ contract BetRegistry is AccessControl {
         BetState storage bet = _bets[betId];
         require(bet.status == BetStatus.MATCHED, "Bet is not matched");
         require(block.timestamp >= bet.deadline, "Deadline has not passed");
-        require(
-            msg.sender == bet.creator || msg.sender == bet.challenger,
-            "Only participants can claim timeout"
-        );
 
         bet.status = BetStatus.CANCELLED;
         --_activeBetCount;
-        vault.unlock(bet.creator, bet.token, bet.stake);
-        vault.unlock(bet.challenger, bet.token, bet.stake);
+
+        uint256 fee = bet.stake * TIMEOUT_FEE_BPS / BPS_DENOMINATOR;
+        uint256 refund = bet.stake - fee;
+
+        vault.debit(bet.creator, bet.token, bet.stake);
+        vault.debit(bet.challenger, bet.token, bet.stake);
+        vault.credit(bet.creator, bet.token, refund);
+        vault.credit(bet.challenger, bet.token, refund);
+        vault.credit(platformAddress, bet.token, fee * 2);
 
         emit BetRefunded(betId);
     }

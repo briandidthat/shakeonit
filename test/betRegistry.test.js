@@ -527,18 +527,30 @@ describe("BetRegistry", function () {
   // ─── claimTimeout() ────────────────────────────────────────────────────────
 
   describe("claimTimeout()", function () {
-    it("refunds both participants after deadline", async function () {
+    it("refunds both participants minus 5% platform fee after deadline", async function () {
       const { betId } = await createMatchedBet();
       await time.increase(ONE_DAY + 1);
 
       await betRegistry.connect(creator).claimTimeout(betId);
 
+      // Each participant staked 1000, fee = 50 (5%), refund = 950
+      // available was 4000 after staking, now 4000 + 950 = 4950
       expect((await betRegistry.getBet(betId)).status).to.equal(BetStatus.CANCELLED);
       expect(await vault.availableBalance(creator.address, tokenAddress)).to.equal(
-        ethers.parseEther("5000")
+        ethers.parseEther("4950")
       );
       expect(await vault.availableBalance(challenger.address, tokenAddress)).to.equal(
-        ethers.parseEther("5000")
+        ethers.parseEther("4950")
+      );
+    });
+
+    it("credits platform with 5% from each side (10% total)", async function () {
+      const { betId } = await createMatchedBet();
+      await time.increase(ONE_DAY + 1);
+      await betRegistry.connect(creator).claimTimeout(betId);
+      // fee = 50 per side, total = 100
+      expect(await vault.availableBalance(platform.address, tokenAddress)).to.equal(
+        ethers.parseEther("100")
       );
     });
 
@@ -572,20 +584,11 @@ describe("BetRegistry", function () {
       );
     });
 
-    it("reverts if caller is not a participant", async function () {
+    it("can be triggered by anyone after deadline (permissionless)", async function () {
       const { betId } = await createMatchedBet();
       await time.increase(ONE_DAY + 1);
-      await expect(betRegistry.connect(stranger).claimTimeout(betId)).to.be.revertedWith(
-        "Only participants can claim timeout"
-      );
-    });
-
-    it("reverts if arbiter tries to claim timeout", async function () {
-      const { betId } = await createMatchedBet();
-      await time.increase(ONE_DAY + 1);
-      await expect(betRegistry.connect(arbiter).claimTimeout(betId)).to.be.revertedWith(
-        "Only participants can claim timeout"
-      );
+      await betRegistry.connect(stranger).claimTimeout(betId);
+      expect((await betRegistry.getBet(betId)).status).to.equal(BetStatus.CANCELLED);
     });
   });
 
