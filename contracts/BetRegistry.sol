@@ -14,8 +14,8 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
  *   OPEN ──acceptBet──► MATCHED ──declareWinner──► SETTLED
  *    │                     │
  *   cancel              forfeit
- *    │                 claimTimeout (after deadline)
- *    ▼                     │
+ *   decline             claimTimeout (after deadline)
+ *    │                     │
  *  CANCELLED ◄─────────────┘
  */
 contract BetRegistry is AccessControl {
@@ -81,7 +81,15 @@ contract BetRegistry is AccessControl {
         uint256 arbiterFee,
         uint256 platformFee,
         uint256 deadline,
+        address challenger, // address(0) for OPEN bets
         BetType betType
+    );
+    event BetDeclined(
+        uint256 indexed betId,
+        address indexed challenger,
+        address indexed creator,
+        address token,
+        uint256 stake
     );
     event BetMatched(
         uint256 indexed betId,
@@ -195,6 +203,7 @@ contract BetRegistry is AccessControl {
             request.arbiterFee,
             request.platformFee,
             request.deadline,
+            request.betType == BetType.PRIVATE ? request.challenger : address(0),
             request.betType
         );
     }
@@ -253,17 +262,38 @@ contract BetRegistry is AccessControl {
 
     /**
      * @notice Creator cancels an unmatched bet and recovers their stake.
+     *         Anyone may cancel once the deadline has passed — protects creators
+     *         who go inactive and allows keepers to clean up expired open bets.
      */
     function cancel(uint256 betId) external {
         BetState storage bet = _bets[betId];
-        require(msg.sender == bet.creator, "Only creator can cancel");
         require(bet.status == BetStatus.OPEN, "Bet is not open");
+        require(
+            msg.sender == bet.creator || block.timestamp >= bet.deadline,
+            "Only creator can cancel before deadline"
+        );
 
         bet.status = BetStatus.CANCELLED;
         --_activeBetCount;
         vault.unlock(bet.creator, bet.token, bet.stake);
 
-        emit BetCancelled(betId, msg.sender, bet.token, bet.stake);
+        emit BetCancelled(betId, bet.creator, bet.token, bet.stake);
+    }
+
+    /**
+     * @notice Designated challenger declines a private bet, unlocking the creator's stake.
+     */
+    function decline(uint256 betId) external {
+        BetState storage bet = _bets[betId];
+        require(bet.betType == BetType.PRIVATE, "Not a private bet");
+        require(bet.status == BetStatus.OPEN, "Bet is not open");
+        require(msg.sender == bet.challenger, "Not the designated challenger");
+
+        bet.status = BetStatus.CANCELLED;
+        --_activeBetCount;
+        vault.unlock(bet.creator, bet.token, bet.stake);
+
+        emit BetDeclined(betId, msg.sender, bet.creator, bet.token, bet.stake);
     }
 
     /**
