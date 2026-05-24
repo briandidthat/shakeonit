@@ -2,6 +2,7 @@ import { BigInt } from "@graphprotocol/graph-ts";
 import { Bet } from "../generated/schema";
 import {
   BetCreated,
+  BetDeclined,
   BetMatched,
   BetSettled,
   BetCancelled,
@@ -28,6 +29,9 @@ export function handleBetCreated(event: BetCreated): void {
     .minus(event.params.arbiterFee)
     .minus(event.params.platformFee);
   bet.deadline = event.params.deadline;
+  if (event.params.betType == 1) {
+    bet.pendingChallenger = event.params.challenger;
+  }
   bet.condition = "";
   bet.arbiter = event.params.arbiter;
   bet.createdAt = event.block.timestamp;
@@ -101,6 +105,29 @@ export function handleBetCancelled(event: BetCancelled): void {
 
   bet.status = "CANCELLED";
   bet.cancelledAt = event.block.timestamp;
+  bet.save();
+
+  let creator = getOrCreateUser(event.params.creator);
+  creator.totalWagered = creator.totalWagered.minus(event.params.stake);
+  creator.save();
+
+  let platform = getOrCreatePlatform();
+  platform.activeBets = platform.activeBets.minus(BigInt.fromI32(1));
+  platform.totalCancelled = platform.totalCancelled.plus(BigInt.fromI32(1));
+  platform.save();
+
+  let stats = getOrCreateDailyStats(event.block.timestamp);
+  stats.betsCancelled = stats.betsCancelled.plus(BigInt.fromI32(1));
+  stats.save();
+}
+
+export function handleBetDeclined(event: BetDeclined): void {
+  let bet = Bet.load(event.params.betId.toString());
+  if (bet == null) return;
+
+  bet.status = "CANCELLED";
+  bet.cancelledAt = event.block.timestamp;
+  bet.pendingChallenger = null;
   bet.save();
 
   let creator = getOrCreateUser(event.params.creator);

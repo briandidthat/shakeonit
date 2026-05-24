@@ -144,11 +144,18 @@ describe("BetRegistry", function () {
       expect(bet.payout).to.equal(ethers.parseEther("1800"));
     });
 
-    it("emits BetCreated", async function () {
+    it("emits BetCreated with ZeroAddress challenger for OPEN bets", async function () {
       const request = await buildRequest();
       await expect(betRegistry.connect(creator).createBet(request))
         .to.emit(betRegistry, "BetCreated")
-        .withArgs(1n, creator.address, arbiter.address, tokenAddress, STAKE, ARBITER_FEE, PLATFORM_FEE, request.deadline, BetType.OPEN);
+        .withArgs(1n, creator.address, arbiter.address, tokenAddress, STAKE, ARBITER_FEE, PLATFORM_FEE, request.deadline, ethers.ZeroAddress, BetType.OPEN);
+    });
+
+    it("emits BetCreated with challenger address for PRIVATE bets", async function () {
+      const request = await buildRequest({ betType: BetType.PRIVATE, challenger: challenger.address });
+      await expect(betRegistry.connect(creator).createBet(request))
+        .to.emit(betRegistry, "BetCreated")
+        .withArgs(1n, creator.address, arbiter.address, tokenAddress, STAKE, ARBITER_FEE, PLATFORM_FEE, request.deadline, challenger.address, BetType.PRIVATE);
     });
 
     it("increments betId sequentially", async function () {
@@ -437,10 +444,10 @@ describe("BetRegistry", function () {
         .withArgs(betId, creator.address, tokenAddress, STAKE);
     });
 
-    it("reverts if caller is not the creator", async function () {
+    it("reverts if non-creator tries to cancel before deadline", async function () {
       const { betId } = await createOpenBet();
       await expect(betRegistry.connect(challenger).cancel(betId)).to.be.revertedWith(
-        "Only creator can cancel"
+        "Only creator can cancel before deadline"
       );
     });
 
@@ -448,6 +455,91 @@ describe("BetRegistry", function () {
       const { betId } = await createMatchedBet();
       await expect(betRegistry.connect(creator).cancel(betId)).to.be.revertedWith(
         "Bet is not open"
+      );
+    });
+
+    it("allows anyone to cancel an expired OPEN bet after deadline", async function () {
+      const { betId } = await createOpenBet();
+      await time.increase(ONE_DAY + 1);
+      await betRegistry.connect(stranger).cancel(betId);
+
+      expect((await betRegistry.getBet(betId)).status).to.equal(BetStatus.CANCELLED);
+      expect(await vault.availableBalance(creator.address, tokenAddress)).to.equal(
+        ethers.parseEther("5000")
+      );
+    });
+
+    it("creator can cancel before deadline", async function () {
+      const { betId } = await createOpenBet();
+      await betRegistry.connect(creator).cancel(betId);
+      expect((await betRegistry.getBet(betId)).status).to.equal(BetStatus.CANCELLED);
+    });
+
+    it("decrements activeBetCount on cancel after deadline", async function () {
+      const { betId } = await createOpenBet();
+      await time.increase(ONE_DAY + 1);
+      await betRegistry.connect(stranger).cancel(betId);
+      expect(await betRegistry.getActiveBetCount()).to.equal(0);
+    });
+  });
+
+  // ─── decline() ─────────────────────────────────────────────────────────────
+
+  describe("decline()", function () {
+    async function createPrivateBet(overrides = {}) {
+      return createOpenBet({ betType: BetType.PRIVATE, challenger: challenger.address, ...overrides });
+    }
+
+    it("designated challenger can decline a private bet", async function () {
+      const { betId } = await createPrivateBet();
+      await betRegistry.connect(challenger).decline(betId);
+
+      expect((await betRegistry.getBet(betId)).status).to.equal(BetStatus.CANCELLED);
+      expect(await vault.availableBalance(creator.address, tokenAddress)).to.equal(
+        ethers.parseEther("5000")
+      );
+      expect(await vault.lockedBalance(creator.address, tokenAddress)).to.equal(0);
+    });
+
+    it("emits BetDeclined", async function () {
+      const { betId } = await createPrivateBet();
+      await expect(betRegistry.connect(challenger).decline(betId))
+        .to.emit(betRegistry, "BetDeclined")
+        .withArgs(betId, challenger.address, creator.address, tokenAddress, STAKE);
+    });
+
+    it("decrements activeBetCount on decline", async function () {
+      const { betId } = await createPrivateBet();
+      await betRegistry.connect(challenger).decline(betId);
+      expect(await betRegistry.getActiveBetCount()).to.equal(0);
+    });
+
+    it("reverts if caller is not the designated challenger", async function () {
+      const { betId } = await createPrivateBet();
+      await expect(betRegistry.connect(stranger).decline(betId)).to.be.revertedWith(
+        "Not the designated challenger"
+      );
+    });
+
+    it("reverts if called on an OPEN (public) bet", async function () {
+      const { betId } = await createOpenBet();
+      await expect(betRegistry.connect(challenger).decline(betId)).to.be.revertedWith(
+        "Not a private bet"
+      );
+    });
+
+    it("reverts if bet is already matched", async function () {
+      const { betId } = await createPrivateBet();
+      await betRegistry.connect(challenger).acceptBet(betId);
+      await expect(betRegistry.connect(challenger).decline(betId)).to.be.revertedWith(
+        "Bet is not open"
+      );
+    });
+
+    it("reverts if creator tries to decline their own private bet", async function () {
+      const { betId } = await createPrivateBet();
+      await expect(betRegistry.connect(creator).decline(betId)).to.be.revertedWith(
+        "Not the designated challenger"
       );
     });
   });

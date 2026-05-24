@@ -22,8 +22,10 @@ dataSources:
         - name: BetRegistry
           file: ./abis/BetRegistry.json
       eventHandlers:
-        - event: BetCreated(indexed uint256,indexed address,indexed address,address,uint256,uint256,uint256,uint256,uint8)
+        - event: BetCreated(indexed uint256,indexed address,indexed address,address,uint256,uint256,uint256,uint256,address,uint8)
           handler: handleBetCreated
+        - event: BetDeclined(indexed uint256,indexed address,indexed address,address,uint256)
+          handler: handleBetDeclined
         - event: BetMatched(indexed uint256,indexed address,address,uint256)
           handler: handleBetMatched
         - event: BetSettled(indexed uint256,indexed address,indexed address,address,uint256,uint256,uint256)

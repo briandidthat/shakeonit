@@ -12,6 +12,7 @@ type Bet @entity(immutable: false) {
   arbiterFee: BigInt!
   platformFee: BigInt!
   deadline: BigInt!
+  pendingChallenger: Bytes # designated challenger for PRIVATE bets before acceptance
   condition: String!
   createdAt: BigInt!
   createdTx: Bytes!
