@@ -60,6 +60,10 @@ contract BetRegistry is AccessControl {
         string condition;
     }
 
+    uint256 private constant TIMEOUT_FEE_BPS = 500; // 5% per participant on arbiter no-show
+    uint256 private constant BPS_DENOMINATOR = 10_000;
+    uint256 private constant MAX_BATCH_SIZE = 50;
+
     uint256 private _betCount;
     uint256 private _activeBetCount;
     address public platformAddress;
@@ -74,22 +78,48 @@ contract BetRegistry is AccessControl {
         address indexed arbiter,
         address token,
         uint256 stake,
+        uint256 arbiterFee,
+        uint256 platformFee,
+        uint256 deadline,
         BetType betType
     );
-    event BetMatched(uint256 indexed betId, address indexed challenger);
+    event BetMatched(
+        uint256 indexed betId,
+        address indexed challenger,
+        address token,
+        uint256 stake
+    );
     event BetSettled(
         uint256 indexed betId,
         address indexed winner,
         address indexed loser,
-        uint256 payout
+        address token,
+        uint256 payout,
+        uint256 arbiterFee,
+        uint256 platformFee
     );
-    event BetCancelled(uint256 indexed betId, address indexed creator);
+    event BetCancelled(
+        uint256 indexed betId,
+        address indexed creator,
+        address token,
+        uint256 stake
+    );
     event BetForfeited(
         uint256 indexed betId,
         address indexed forfeiter,
-        address indexed winner
+        address indexed winner,
+        address token,
+        uint256 payout,
+        uint256 platformFee
     );
-    event BetRefunded(uint256 indexed betId);
+    event BetRefunded(
+        uint256 indexed betId,
+        address indexed creator,
+        address indexed challenger,
+        address token,
+        uint256 refundPerParticipant,
+        uint256 platformFee
+    );
     event PlatformAddressUpdated(address indexed oldAddress, address indexed newAddress);
 
     constructor(
@@ -162,6 +192,9 @@ contract BetRegistry is AccessControl {
             request.arbiter,
             request.token,
             request.stake,
+            request.arbiterFee,
+            request.platformFee,
+            request.deadline,
             request.betType
         );
     }
@@ -186,7 +219,7 @@ contract BetRegistry is AccessControl {
 
         vault.lock(msg.sender, bet.token, bet.stake);
 
-        emit BetMatched(betId, msg.sender);
+        emit BetMatched(betId, msg.sender, bet.token, bet.stake);
     }
 
     /**
@@ -215,7 +248,7 @@ contract BetRegistry is AccessControl {
         registry.recordWin(winner);
         registry.recordLoss(loser);
 
-        emit BetSettled(betId, winner, loser, bet.payout);
+        emit BetSettled(betId, winner, loser, bet.token, bet.payout, bet.arbiterFee, bet.platformFee);
     }
 
     /**
@@ -230,7 +263,7 @@ contract BetRegistry is AccessControl {
         --_activeBetCount;
         vault.unlock(bet.creator, bet.token, bet.stake);
 
-        emit BetCancelled(betId, msg.sender);
+        emit BetCancelled(betId, msg.sender, bet.token, bet.stake);
     }
 
     /**
@@ -261,7 +294,7 @@ contract BetRegistry is AccessControl {
         registry.recordWin(winner);
         registry.recordLoss(loser);
 
-        emit BetForfeited(betId, loser, winner);
+        emit BetForfeited(betId, loser, winner, bet.token, bet.payout, bet.platformFee);
     }
 
     /**
@@ -272,17 +305,48 @@ contract BetRegistry is AccessControl {
         BetState storage bet = _bets[betId];
         require(bet.status == BetStatus.MATCHED, "Bet is not matched");
         require(block.timestamp >= bet.deadline, "Deadline has not passed");
-        require(
-            msg.sender == bet.creator || msg.sender == bet.challenger,
-            "Only participants can claim timeout"
-        );
 
         bet.status = BetStatus.CANCELLED;
         --_activeBetCount;
-        vault.unlock(bet.creator, bet.token, bet.stake);
-        vault.unlock(bet.challenger, bet.token, bet.stake);
 
-        emit BetRefunded(betId);
+        uint256 fee = bet.stake * TIMEOUT_FEE_BPS / BPS_DENOMINATOR;
+        uint256 refund = bet.stake - fee;
+
+        vault.debit(bet.creator, bet.token, bet.stake);
+        vault.debit(bet.challenger, bet.token, bet.stake);
+        vault.credit(bet.creator, bet.token, refund);
+        vault.credit(bet.challenger, bet.token, refund);
+        vault.credit(platformAddress, bet.token, fee * 2);
+
+        emit BetRefunded(betId, bet.creator, bet.challenger, bet.token, refund, fee * 2);
+    }
+
+    /**
+     * @notice Processes up to MAX_BATCH_SIZE expired bets in one transaction.
+     *         Invalid or already-settled IDs are silently skipped, making this
+     *         safe for keeper automation. Reverts if betIds exceeds MAX_BATCH_SIZE.
+     */
+    function batchClaimTimeout(uint256[] calldata betIds) external {
+        require(betIds.length <= MAX_BATCH_SIZE, "Exceeds batch limit");
+
+        for (uint256 i = 0; i < betIds.length; i++) {
+            BetState storage bet = _bets[betIds[i]];
+            if (bet.status != BetStatus.MATCHED || block.timestamp < bet.deadline) continue;
+
+            bet.status = BetStatus.CANCELLED;
+            --_activeBetCount;
+
+            uint256 fee = bet.stake * TIMEOUT_FEE_BPS / BPS_DENOMINATOR;
+            uint256 refund = bet.stake - fee;
+
+            vault.debit(bet.creator, bet.token, bet.stake);
+            vault.debit(bet.challenger, bet.token, bet.stake);
+            vault.credit(bet.creator, bet.token, refund);
+            vault.credit(bet.challenger, bet.token, refund);
+            vault.credit(platformAddress, bet.token, fee * 2);
+
+            emit BetRefunded(betIds[i], bet.creator, bet.challenger, bet.token, refund, fee * 2);
+        }
     }
 
     // ─── Admin ────────────────────────────────────────────────────────────────
