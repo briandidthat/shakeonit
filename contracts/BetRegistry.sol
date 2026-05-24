@@ -62,6 +62,7 @@ contract BetRegistry is AccessControl {
 
     uint256 private constant TIMEOUT_FEE_BPS = 500; // 5% per participant on arbiter no-show
     uint256 private constant BPS_DENOMINATOR = 10_000;
+    uint256 private constant MAX_BATCH_SIZE = 50;
 
     uint256 private _betCount;
     uint256 private _activeBetCount;
@@ -289,6 +290,34 @@ contract BetRegistry is AccessControl {
         vault.credit(platformAddress, bet.token, fee * 2);
 
         emit BetRefunded(betId);
+    }
+
+    /**
+     * @notice Processes up to MAX_BATCH_SIZE expired bets in one transaction.
+     *         Invalid or already-settled IDs are silently skipped, making this
+     *         safe for keeper automation. Reverts if betIds exceeds MAX_BATCH_SIZE.
+     */
+    function batchClaimTimeout(uint256[] calldata betIds) external {
+        require(betIds.length <= MAX_BATCH_SIZE, "Exceeds batch limit");
+
+        for (uint256 i = 0; i < betIds.length; i++) {
+            BetState storage bet = _bets[betIds[i]];
+            if (bet.status != BetStatus.MATCHED || block.timestamp < bet.deadline) continue;
+
+            bet.status = BetStatus.CANCELLED;
+            --_activeBetCount;
+
+            uint256 fee = bet.stake * TIMEOUT_FEE_BPS / BPS_DENOMINATOR;
+            uint256 refund = bet.stake - fee;
+
+            vault.debit(bet.creator, bet.token, bet.stake);
+            vault.debit(bet.challenger, bet.token, bet.stake);
+            vault.credit(bet.creator, bet.token, refund);
+            vault.credit(bet.challenger, bet.token, refund);
+            vault.credit(platformAddress, bet.token, fee * 2);
+
+            emit BetRefunded(betIds[i]);
+        }
     }
 
     // ─── Admin ────────────────────────────────────────────────────────────────

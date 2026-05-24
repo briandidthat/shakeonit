@@ -592,6 +592,92 @@ describe("BetRegistry", function () {
     });
   });
 
+  // ─── batchClaimTimeout() ───────────────────────────────────────────────────
+
+  describe("batchClaimTimeout()", function () {
+    it("processes multiple expired bets in one call", async function () {
+      const { betId: id1 } = await createMatchedBet();
+      const { betId: id2 } = await createMatchedBet();
+      const { betId: id3 } = await createMatchedBet();
+      await time.increase(ONE_DAY + 1);
+
+      await betRegistry.connect(stranger).batchClaimTimeout([id1, id2, id3]);
+
+      for (const id of [id1, id2, id3]) {
+        expect((await betRegistry.getBet(id)).status).to.equal(BetStatus.CANCELLED);
+      }
+    });
+
+    it("applies the 5% timeout fee for each processed bet", async function () {
+      const { betId: id1 } = await createMatchedBet();
+      const { betId: id2 } = await createMatchedBet();
+      await time.increase(ONE_DAY + 1);
+
+      await betRegistry.connect(stranger).batchClaimTimeout([id1, id2]);
+
+      // 2 bets × 100 tokens platform fee each = 200 total
+      expect(await vault.availableBalance(platform.address, tokenAddress)).to.equal(
+        ethers.parseEther("200")
+      );
+    });
+
+    it("skips bets that are not matched", async function () {
+      const { betId: openId } = await createOpenBet();
+      const { betId: matchedId } = await createMatchedBet();
+      await time.increase(ONE_DAY + 1);
+
+      await betRegistry.connect(stranger).batchClaimTimeout([openId, matchedId]);
+
+      expect((await betRegistry.getBet(openId)).status).to.equal(BetStatus.OPEN);
+      expect((await betRegistry.getBet(matchedId)).status).to.equal(BetStatus.CANCELLED);
+    });
+
+    it("skips bets whose deadline has not passed", async function () {
+      const { betId: earlyId } = await createMatchedBet();
+      const { betId: expiredId } = await createMatchedBet({ deadline: (await time.latest()) + 10 });
+      await time.increase(11);
+
+      await betRegistry.connect(stranger).batchClaimTimeout([earlyId, expiredId]);
+
+      expect((await betRegistry.getBet(earlyId)).status).to.equal(BetStatus.MATCHED);
+      expect((await betRegistry.getBet(expiredId)).status).to.equal(BetStatus.CANCELLED);
+    });
+
+    it("emits BetRefunded for each processed bet", async function () {
+      const { betId: id1 } = await createMatchedBet();
+      const { betId: id2 } = await createMatchedBet();
+      await time.increase(ONE_DAY + 1);
+
+      await expect(betRegistry.connect(stranger).batchClaimTimeout([id1, id2]))
+        .to.emit(betRegistry, "BetRefunded").withArgs(id1)
+        .and.to.emit(betRegistry, "BetRefunded").withArgs(id2);
+    });
+
+    it("reverts if batch size exceeds the limit of 50", async function () {
+      const ids = Array.from({ length: 51 }, (_, i) => i + 1);
+      await expect(
+        betRegistry.connect(stranger).batchClaimTimeout(ids)
+      ).to.be.revertedWith("Exceeds batch limit");
+    });
+
+    it("accepts exactly 50 ids without reverting", async function () {
+      const ids = Array.from({ length: 50 }, (_, i) => i + 1);
+      await expect(
+        betRegistry.connect(stranger).batchClaimTimeout(ids)
+      ).to.not.be.reverted;
+    });
+
+    it("decrements activeBetCount for each processed bet", async function () {
+      const { betId: id1 } = await createMatchedBet();
+      const { betId: id2 } = await createMatchedBet();
+      await time.increase(ONE_DAY + 1);
+      expect(await betRegistry.getActiveBetCount()).to.equal(2);
+
+      await betRegistry.connect(stranger).batchClaimTimeout([id1, id2]);
+      expect(await betRegistry.getActiveBetCount()).to.equal(0);
+    });
+  });
+
   // ─── getActiveBetCount() ───────────────────────────────────────────────────
 
   describe("getActiveBetCount()", function () {
