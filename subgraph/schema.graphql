@@ -1,0 +1,68 @@
+type Bet @entity(immutable: false) {
+  id: ID! # betId as string
+  betType: String! # "OPEN" | "PRIVATE"
+  status: String! # "OPEN" | "MATCHED" | "SETTLED" | "CANCELLED" | "FORFEITED" | "TIMEDOUT"
+  token: Bytes!
+  creator: User!
+  challenger: User
+  arbiter: Bytes!
+  winner: User
+  stake: BigInt!
+  payout: BigInt!
+  arbiterFee: BigInt!
+  platformFee: BigInt!
+  deadline: BigInt!
+  condition: String!
+  createdAt: BigInt!
+  createdTx: Bytes!
+  matchedAt: BigInt
+  settledAt: BigInt
+  cancelledAt: BigInt
+  refundPerParticipant: BigInt
+  timeoutFee: BigInt
+}
+
+type User @entity(immutable: false) {
+  id: ID! # checksummed address
+  username: Bytes
+  wins: BigInt!
+  losses: BigInt!
+  totalWagered: BigInt!
+  totalEarned: BigInt!
+  registeredAt: BigInt
+  betsCreated: [Bet!]! @derivedFrom(field: "creator")
+  betsAccepted: [Bet!]! @derivedFrom(field: "challenger")
+  betsWon: [Bet!]! @derivedFrom(field: "winner")
+  balances: [UserTokenBalance!]! @derivedFrom(field: "user")
+}
+
+type UserTokenBalance @entity(immutable: false) {
+  id: ID! # user-token
+  user: User!
+  token: Bytes!
+  available: BigInt!
+  locked: BigInt!
+}
+
+type Platform @entity(immutable: false) {
+  id: ID! # singleton: "platform"
+  totalBets: BigInt!
+  activeBets: BigInt!
+  totalSettled: BigInt!
+  totalCancelled: BigInt!
+  totalForfeited: BigInt!
+  totalTimedOut: BigInt!
+  totalFeesCollected: BigInt!
+}
+
+type DailyStats @entity(immutable: false) {
+  id: ID! # YYYY-MM-DD
+  date: String!
+  betsCreated: BigInt!
+  betsSettled: BigInt!
+  betsCancelled: BigInt!
+  betsForfeited: BigInt!
+  betsTimedOut: BigInt!
+  volume: BigInt!
+  feesCollected: BigInt!
+}

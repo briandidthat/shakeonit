@@ -1,0 +1,17 @@
+{
+  "name": "shakeonit-keeper",
+  "version": "1.0.0",
+  "description": "Keeper script that settles expired bets on the ShakeOnIt protocol",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dry-run": "DRY_RUN=true node index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.0.0",
+    "ethers": "^6.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
